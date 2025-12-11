@@ -30,20 +30,32 @@ jobs:
       working-directory: backend
       run: npm install
 
-    # Frontend Install
+    # Clean Frontend Cache
+    - name: Clean Frontend Cache
+      working-directory: frontend
+      run: |
+        rm -rf node_modules package-lock.json
+        npm cache clean --force
+
+    # Install Frontend Dependencies
     - name: Install Frontend Dependencies
       working-directory: frontend
       run: npm install
+
+    # Debug package.json to ensure correct file is used
+    - name: Debug Package.json
+      working-directory: frontend
+      run: cat package.json
+
+    # Build Frontend (CRA)
+    - name: Build Frontend
+      working-directory: frontend
+      run: npm run build
 
     # Backend Tests (Optional)
     - name: Run Backend Lint/Tests
       working-directory: backend
       run: echo "Skipping tests for demo"
-
-    # Frontend Build (CRA)
-    - name: Build Frontend
-      working-directory: frontend
-      run: npm run build
 
   docker-build-push:
     runs-on: ubuntu-latest
