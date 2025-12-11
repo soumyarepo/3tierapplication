@@ -29,6 +29,11 @@ jobs:
       working-directory: backend
       run: npm install
 
+    - name: Clear Frontend npm Cache and Install Dependencies
+      working-directory: frontend
+      run: |
+        npm ci
+
     - name: Install Frontend Dependencies
       working-directory: frontend
       run: npm install
