@@ -2,9 +2,9 @@ name: CI/CD Pipeline - 3 Tier Banking App (ECR + EKS)
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
 
 env:
   AWS_REGION: ap-south-1
@@ -25,25 +25,23 @@ jobs:
       with:
         node-version: 18
 
+    # Backend Install
     - name: Install Backend Dependencies
       working-directory: backend
       run: npm install
 
-    - name: Clear Frontend npm Cache and Install Dependencies
-      working-directory: frontend
-      run: npm ci
-        
-
+    # Frontend Install
     - name: Install Frontend Dependencies
       working-directory: frontend
       run: npm install
 
+    # Backend Tests (Optional)
     - name: Run Backend Lint/Tests
       working-directory: backend
-      run: |
-        echo "Skipping tests for demo"
+      run: echo "Skipping tests for demo"
 
-    - name: Run Frontend Build
+    # Frontend Build (CRA)
+    - name: Build Frontend
       working-directory: frontend
       run: npm run build
 
@@ -66,25 +64,26 @@ jobs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
 
+    # Build Backend Docker Image
     - name: Build Backend Image
       run: |
         docker build -t $ECR_REPO:${{ env.BACKEND_IMAGE }} ./backend
         docker tag $ECR_REPO:${{ env.BACKEND_IMAGE }} \
           ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.BACKEND_IMAGE }}
 
+    # Build Frontend Docker Image
     - name: Build Frontend Image
       run: |
         docker build -t $ECR_REPO:${{ env.FRONTEND_IMAGE }} ./frontend
         docker tag $ECR_REPO:${{ env.FRONTEND_IMAGE }} \
           ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.FRONTEND_IMAGE }}
 
+    # Push Both Images
     - name: Push Backend Image to ECR
-      run: |
-        docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.BACKEND_IMAGE }}
+      run: docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.BACKEND_IMAGE }}
 
     - name: Push Frontend Image to ECR
-      run: |
-        docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.FRONTEND_IMAGE }}
+      run: docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.FRONTEND_IMAGE }}
 
   deploy-eks:
     runs-on: ubuntu-latest
