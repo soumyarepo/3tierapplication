@@ -132,12 +132,12 @@ jobs:
 
     - name: Deploy Backend & Frontend using Helm
       run: |
-        helm upgrade --install banking-app ./helm \
+        helm upgrade --install banking-app ./helm --timeout 10m --wait --atomic \
           --namespace default \
           --set image.repository=${{ steps.login-ecr.outputs.registry }}/$ECR_REPO \
           --set image.tag=${{ env.BACKEND_IMAGE }}
         
-        helm upgrade --install banking-app ./helm \
+        helm upgrade --install banking-app ./helm --timeout 10m --wait --atomic \
           --namespace default \
           --set image.repository=${{ steps.login-ecr.outputs.registry }}/$ECR_REPO \
           --set image.tag=${{ env.FRONTEND_IMAGE }}
