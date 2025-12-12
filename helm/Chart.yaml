@@ -1,0 +1,6 @@
+apiVersion: v2
+name: banking-app
+description: A 3-tier Banking App with Helm
+type: application
+version: 1.0.0
+appVersion: "1.0"

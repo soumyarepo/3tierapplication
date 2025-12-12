@@ -1,0 +1,23 @@
+replicaCount: 2
+
+backend:
+  image:
+    repository: 096803082838.dkr.ecr.ap-south-1.amazonaws.com/3tierbanking-app
+    tag: backend
+  port: 8080
+
+frontend:
+  image:
+    repository: 096803082838.dkr.ecr.ap-south-1.amazonaws.com/3tierbanking-app
+    tag: frontend
+  port: 80
+
+db:
+  secretName: rds-secret
+  migrationConfigMap: db-migration-scripts
+
+service:
+  type: LoadBalancer
+
+ingress:
+  enabled: false
