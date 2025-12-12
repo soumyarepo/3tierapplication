@@ -1,14 +1,10 @@
-require('dotenv').config();
-
-
 module.exports = {
-port: process.env.PORT || 8080,
-db: {
-user: process.env.DB_USER,
-password: process.env.DB_PASS,
-host: process.env.DB_HOST,
-port: process.env.DB_PORT,
-database: process.env.DB_NAME
-},
-jwtSecret: process.env.JWT_SECRET || "dev-secret"
+  db: {
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    database: process.env.DB_NAME,
+    port: process.env.DB_PORT || 3306
+  },
+  jwtSecret: process.env.JWT_SECRET || "supersecretkey"
 };
