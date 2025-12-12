@@ -2,9 +2,9 @@ name: CI/CD Pipeline - 3 Tier Banking App (ECR + EKS)
 
 on:
   push:
-    branches: ["master"]
+    branches: ["databaserds"]
   pull_request:
-    branches: ["master"]
+    branches: ["databaserds"]
 
 env:
   AWS_REGION: ap-south-1
