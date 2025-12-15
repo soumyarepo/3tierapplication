@@ -1,3 +1,3 @@
-{{- define "banking.fullname" -}}
+{{- define "bankingapp.fullname" -}}
 {{ .Release.Name }}-{{ .Chart.Name }}
 {{- end }}
