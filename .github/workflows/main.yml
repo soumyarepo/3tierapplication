@@ -136,6 +136,7 @@ jobs:
             --from-literal=dbname=${{ secrets.RDS_DBNAME }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
+
       ##########################################################
       # Helm Deploy (DB migration runs via pre-install hook)
       ##########################################################
