@@ -57,46 +57,59 @@ jobs:
 ##############################################################
 # 2) DOCKER BUILD & PUSH TO ECR
 ##############################################################
-  docker-build-push:
-    runs-on: ubuntu-latest
-    needs: build-test
+  ##############################################################
+# 2) DOCKER BUILD & PUSH TO ECR
+##############################################################
+docker-build-push:
+  runs-on: ubuntu-latest
+  needs: build-test
 
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+  env:
+    ECR_REPO: 3tierbanking-app
+    BACKEND_IMAGE: backend
+    FRONTEND_IMAGE: frontend
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+  steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
 
-      # Backend Image
-      - name: Build Backend Image
-        run: |
-          set -x
-          echo "ECR_REPO=$ECR_REPO"
-          echo "BACKEND_IMAGE=$BACKEND_IMAGE"
-          echo "ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}"
-          docker build -t $ECR_REPO:$BACKEND_IMAGE ./backend
-          docker tag $ECR_REPO:$BACKEND_IMAGE ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$BACKEND_IMAGE
-      # Frontend Image
-      - name: Build Frontend Image
-        run: |
-          docker build -t $ECR_REPO:${{ env.FRONTEND_IMAGE }} ./frontend
-          docker tag $ECR_REPO:${{ env.FRONTEND_IMAGE }} \
-            ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.FRONTEND_IMAGE }}
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Push Backend Image
-        run: docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$BACKEND_IMAGE
+    # Build Backend Docker Image
+    - name: Build Backend Image
+      run: |
+        echo "Building backend image..."
+        docker build -t $ECR_REPO:$BACKEND_IMAGE ./backend
+        docker tag $ECR_REPO:$BACKEND_IMAGE ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$BACKEND_IMAGE
 
-      - name: Push Frontend Image
-        run: docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$FRONTEND_IMAGE
+    # Build Frontend Docker Image
+    - name: Build Frontend Image
+      run: |
+        echo "Building frontend image..."
+        docker build -t $ECR_REPO:$FRONTEND_IMAGE ./frontend
+        docker tag $ECR_REPO:$FRONTEND_IMAGE ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$FRONTEND_IMAGE
+
+    # Push Backend Image
+    - name: Push Backend Image
+      run: |
+        echo "Pushing backend image..."
+        docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$BACKEND_IMAGE
+
+    # Push Frontend Image
+    - name: Push Frontend Image
+      run: |
+        echo "Pushing frontend image..."
+        docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$FRONTEND_IMAGE
+
 
 
 ##############################################################
