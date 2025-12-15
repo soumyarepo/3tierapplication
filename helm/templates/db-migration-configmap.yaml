@@ -2,12 +2,9 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ .Values.db.migrationConfigMap }}
+  namespace: default
 data:
-  schema.sql: |-
-{{- with .Files.Get "database/scripts/schema.sql" | indent 4 }}
-{{ . }}
-{{- end }}
-  sample-data.sql: |-
-{{- with .Files.Get "database/scripts/sample-data.sql" | indent 4 }}
-{{ . }}
-{{- end }}
+  schema.sql: |
+{{ .Files.Get "database/scripts/schema.sql" | indent 4 }}
+  sample-data.sql: |
+{{ .Files.Get "database/scripts/sample-data.sql" | indent 4 }}
