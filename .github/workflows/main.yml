@@ -79,28 +79,22 @@ jobs:
       # Build Backend Docker Image
       - name: Build Backend Image
         run: |
-          echo "Building backend image..."
           docker build -t $ECR_REPO:$BACKEND_IMAGE ./backend
           docker tag $ECR_REPO:$BACKEND_IMAGE ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$BACKEND_IMAGE
 
       # Build Frontend Docker Image
       - name: Build Frontend Image
         run: |
-          echo "Building frontend image..."
           docker build -t $ECR_REPO:$FRONTEND_IMAGE ./frontend
           docker tag $ECR_REPO:$FRONTEND_IMAGE ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$FRONTEND_IMAGE
 
       # Push Backend Image
       - name: Push Backend Image
-        run: |
-          echo "Pushing backend image..."
-          docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$BACKEND_IMAGE
+        run: docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$BACKEND_IMAGE
 
       # Push Frontend Image
       - name: Push Frontend Image
-        run: |
-          echo "Pushing frontend image..."
-          docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$FRONTEND_IMAGE
+        run: docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$FRONTEND_IMAGE
 
   ##############################################################
   # 3) DEPLOY TO EKS USING HELM (WITH DB SECRET)
@@ -127,7 +121,7 @@ jobs:
             --region ${{ env.AWS_REGION }}
 
       ##########################################################
-      # Create / Update RDS Secret (idempotent)
+      # Create / Update RDS Secret Safely
       ##########################################################
       - name: Create / Update RDS Secret
         run: |
@@ -140,20 +134,27 @@ jobs:
             echo "No existing RDS secret found."
           fi
 
-          echo "Creating new RDS secret..."
-          kubectl create secret generic rds-secret \
-            --namespace default \
-            --from-literal=host=${{ secrets.RDS_HOST }} \
-            --from-literal=port=${{ secrets.RDS_PORT }} \
-            --from-literal=username=${{ secrets.RDS_USERNAME }} \
-            --from-literal=password=${{ secrets.RDS_PASSWORD }} \
-            --from-literal=dbname=${{ secrets.RDS_DBNAME }}
+          echo "Creating new RDS secret from YAML..."
+          cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rds-secret
+  namespace: default
+type: Opaque
+stringData:
+  host: "${{ secrets.RDS_HOST }}"
+  port: "${{ secrets.RDS_PORT }}"
+  username: "${{ secrets.RDS_USERNAME }}"
+  password: "${{ secrets.RDS_PASSWORD }}"
+  dbname: "${{ secrets.RDS_DBNAME }}"
+EOF
 
           echo "New RDS secret created:"
           kubectl get secret rds-secret -n default -o yaml
 
       ##########################################################
-      # Helm Deploy
+      # Helm Deploy (DB migration runs via pre-install hook)
       ##########################################################
       - name: Deploy Banking App via Helm
         run: |
