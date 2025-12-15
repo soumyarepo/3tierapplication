@@ -3,13 +3,11 @@ kind: ConfigMap
 metadata:
   name: {{ .Values.db.migrationConfigMap }}
 data:
-  schema.sql: |
-    CREATE TABLE IF NOT EXISTS users (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      username VARCHAR(50),
-      password VARCHAR(255)
-    );
-
-  sample-data.sql: |
-    INSERT INTO users (username, password)
-    VALUES ('admin', 'admin123');
+  schema.sql: |-
+{{- with .Files.Get "database/scripts/schema.sql" | indent 4 }}
+{{ . }}
+{{- end }}
+  sample-data.sql: |-
+{{- with .Files.Get "database/scripts/sample-data.sql" | indent 4 }}
+{{ . }}
+{{- end }}
