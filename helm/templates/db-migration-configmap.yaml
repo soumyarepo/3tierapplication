@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ .Values.db.migrationConfigMap }}
-  namespace: default
+  namespace: {{ .Release.Namespace }}
 data:
   schema.sql: |
 {{ .Files.Get "database/scripts/schema.sql" | indent 4 }}
