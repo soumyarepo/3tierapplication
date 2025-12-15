@@ -14,10 +14,10 @@ env:
   BACKEND_IMAGE: backend
   FRONTEND_IMAGE: frontend
 
+##############################################################
+# 1) BUILD & TEST
+##############################################################
 jobs:
-##############################################################
-# 1) BUILD + TEST
-##############################################################
   build-test:
     runs-on: ubuntu-latest
 
@@ -30,30 +30,27 @@ jobs:
         with:
           node-version: 18
 
-      # Backend Dependencies
+      # Backend dependencies
       - name: Install Backend Dependencies
         working-directory: backend
         run: npm install
 
-      # Clean Frontend Cache
+      # Frontend dependencies
       - name: Clean Frontend Cache
         working-directory: frontend
         run: |
           rm -rf node_modules package-lock.json
           npm cache clean --force
 
-      # Install Frontend Dependencies
       - name: Install Frontend Dependencies
         working-directory: frontend
         run: npm install
 
-      # Build Frontend
       - name: Build Frontend
         working-directory: frontend
         run: npm run build
 
-      # Backend Tests (Optional)
-      - name: Run Backend Tests
+      - name: Backend Tests (Optional)
         working-directory: backend
         run: echo "Skipping tests for demo"
 
@@ -79,34 +76,30 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # Build Backend Image
+      # Backend Image
       - name: Build Backend Image
         run: |
           docker build -t $ECR_REPO:${{ env.BACKEND_IMAGE }} ./backend
           docker tag $ECR_REPO:${{ env.BACKEND_IMAGE }} \
             ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.BACKEND_IMAGE }}
 
-      # Build Frontend Image
+      # Frontend Image
       - name: Build Frontend Image
         run: |
           docker build -t $ECR_REPO:${{ env.FRONTEND_IMAGE }} ./frontend
           docker tag $ECR_REPO:${{ env.FRONTEND_IMAGE }} \
             ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.FRONTEND_IMAGE }}
 
-      # Push Backend Image
       - name: Push Backend Image
-        run: |
-          docker push \
-            ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.BACKEND_IMAGE }}
+        run: docker push \
+          ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.BACKEND_IMAGE }}
 
-      # Push Frontend Image
       - name: Push Frontend Image
-        run: |
-          docker push \
-            ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.FRONTEND_IMAGE }}
+        run: docker push \
+          ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.FRONTEND_IMAGE }}
 
 ##############################################################
-# 3) DEPLOY TO EKS USING HELM
+# 3) DEPLOY TO EKS USING HELM (WITH DB SECRET)
 ##############################################################
   deploy-eks:
     runs-on: ubuntu-latest
@@ -129,6 +122,23 @@ jobs:
             --name ${{ secrets.EKS_CLUSTER_NAME }} \
             --region ${{ env.AWS_REGION }}
 
+      ##########################################################
+      # Create / Update RDS Secret (SAFE & IDEMPOTENT)
+      ##########################################################
+      - name: Create / Update RDS Secret
+        run: |
+          kubectl create secret generic rds-secret \
+            --namespace default \
+            --from-literal=host=${{ secrets.RDS_HOST }} \
+            --from-literal=port=${{ secrets.RDS_PORT }} \
+            --from-literal=username=${{ secrets.RDS_USERNAME }} \
+            --from-literal=password=${{ secrets.RDS_PASSWORD }} \
+            --from-literal=dbname=${{ secrets.RDS_DBNAME }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      ##########################################################
+      # Helm Deploy (DB migration runs via pre-install hook)
+      ##########################################################
       - name: Deploy Banking App via Helm
         run: |
           helm upgrade --install banking-app ./helm \
@@ -137,13 +147,13 @@ jobs:
             --wait \
             --timeout 10m \
             --atomic \
-            --set image.backend.repository=${{ secrets.ECR_REGISTRY }}/$ECR_REPO \
+            --set image.backend.repository=${{ steps.login-ecr.outputs.registry }}/$ECR_REPO \
             --set image.backend.tag=${{ env.BACKEND_IMAGE }} \
-            --set image.frontend.repository=${{ secrets.ECR_REGISTRY }}/$ECR_REPO \
+            --set image.frontend.repository=${{ steps.login-ecr.outputs.registry }}/$ECR_REPO \
             --set image.frontend.tag=${{ env.FRONTEND_IMAGE }} \
             --set ingress.enabled=false
 
       - name: Verify Rollout
         run: |
-          kubectl rollout status deployment/banking-app-backend --namespace default
-          kubectl rollout status deployment/banking-app-frontend --namespace default
+          kubectl rollout status deployment/banking-app-backend -n default
+          kubectl rollout status deployment/banking-app-frontend -n default
