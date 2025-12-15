@@ -96,7 +96,7 @@ jobs:
         run: docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$BACKEND_IMAGE
 
       - name: Push Frontend Image
-        run: docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$BACKEND_IMAGE
+        run: docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$FRONTEND_IMAGE
 
 
 ##############################################################
