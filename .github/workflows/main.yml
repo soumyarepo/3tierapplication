@@ -120,20 +120,21 @@ jobs:
             --name ${{ secrets.EKS_CLUSTER_NAME }} \
             --region ${{ env.AWS_REGION }}
 
+     
       ##########################################################
       # Create / Update RDS Secret (Idempotent)
       ##########################################################
       - name: Create / Update RDS Secret
         run: |
-          kubectl get secret rds-secret -n default >/dev/null 2>&1 && \
-            kubectl delete secret rds-secret -n default || echo "Secret does not exist, creating..."
           kubectl create secret generic rds-secret \
             --namespace default \
             --from-literal=host=${{ secrets.RDS_HOST }} \
             --from-literal=port=${{ secrets.RDS_PORT }} \
             --from-literal=username=${{ secrets.RDS_USERNAME }} \
             --from-literal=password=${{ secrets.RDS_PASSWORD }} \
-            --from-literal=dbname=${{ secrets.RDS_DBNAME }}
+            --from-literal=dbname=${{ secrets.RDS_DBNAME }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
 
       ##########################################################
       # Helm Deploy
