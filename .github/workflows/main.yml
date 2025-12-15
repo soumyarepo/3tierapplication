@@ -79,10 +79,12 @@ jobs:
       # Backend Image
       - name: Build Backend Image
         run: |
-          docker build -t $ECR_REPO:${{ env.BACKEND_IMAGE }} ./backend
-          docker tag $ECR_REPO:${{ env.BACKEND_IMAGE }} \
-            ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.BACKEND_IMAGE }}
-
+          set -x
+          echo "ECR_REPO=$ECR_REPO"
+          echo "BACKEND_IMAGE=$BACKEND_IMAGE"
+          echo "ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}"
+          docker build -t $ECR_REPO:$BACKEND_IMAGE ./backend
+          docker tag $ECR_REPO:$BACKEND_IMAGE ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$BACKEND_IMAGE
       # Frontend Image
       - name: Build Frontend Image
         run: |
