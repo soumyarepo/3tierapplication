@@ -91,12 +91,11 @@ jobs:
             ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.FRONTEND_IMAGE }}
 
       - name: Push Backend Image
-        run: docker push \
-          ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.BACKEND_IMAGE }}
+        run: docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.BACKEND_IMAGE }}
 
       - name: Push Frontend Image
-        run: docker push \
-          ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.FRONTEND_IMAGE }}
+        run: docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.FRONTEND_IMAGE }}
+
 
 ##############################################################
 # 3) DEPLOY TO EKS USING HELM (WITH DB SECRET)
