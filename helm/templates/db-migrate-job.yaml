@@ -18,24 +18,51 @@ spec:
             - sh
             - -c
             - |
+              set -e
+
               echo "Waiting for DB..."
-              until mysql -h $MYSQL_HOST -u $MYSQL_USER -p$MYSQL_PASSWORD -e "SELECT 1"; do
+              until mysql -h "$MYSQL_HOST" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "SELECT 1"; do
+                echo "DB not ready, retrying..."
                 sleep 5
               done
 
               echo "Running schema migration..."
-              mysql -h $MYSQL_HOST -u $MYSQL_USER -p$MYSQL_PASSWORD $MYSQL_DATABASE < /scripts/schema.sql
+              mysql -h "$MYSQL_HOST" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" < /scripts/schema.sql
 
               echo "Running seed data..."
-              mysql -h $MYSQL_HOST -u $MYSQL_USER -p$MYSQL_PASSWORD $MYSQL_DATABASE < /scripts/sample-data.sql
+              mysql -h "$MYSQL_HOST" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" < /scripts/sample-data.sql
 
               echo "DB migration completed"
-          envFrom:
-            - secretRef:
-                name: {{ .Values.db.secretName }}
+
+          env:
+            - name: MYSQL_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.db.secretName }}
+                  key: host
+
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.db.secretName }}
+                  key: username
+
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.db.secretName }}
+                  key: password
+
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.db.secretName }}
+                  key: dbname
+
           volumeMounts:
             - name: scripts
               mountPath: /scripts
+
       volumes:
         - name: scripts
           configMap:
