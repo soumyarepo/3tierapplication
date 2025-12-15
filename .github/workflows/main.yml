@@ -2,9 +2,11 @@ name: CI/CD Pipeline - 3 Tier Banking App
 
 on:
   push:
-    branches: ["databaserds"]
+    branches:
+      - databaserds
   pull_request:
-    branches: ["databaserds"]
+    branches:
+      - databaserds
 
 env:
   AWS_REGION: ap-south-1
@@ -20,45 +22,40 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Setup NodeJS
-      uses: actions/setup-node@v4
-      with:
-        node-version: 18
+      - name: Setup NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
 
-    # Backend Install
-    - name: Install Backend Dependencies
-      working-directory: backend
-      run: npm install
+      # Backend Dependencies
+      - name: Install Backend Dependencies
+        working-directory: backend
+        run: npm install
 
-    # Clean Frontend Cache
-    - name: Clean Frontend Cache
-      working-directory: frontend
-      run: |
-        rm -rf node_modules package-lock.json
-        npm cache clean --force
+      # Clean Frontend Cache
+      - name: Clean Frontend Cache
+        working-directory: frontend
+        run: |
+          rm -rf node_modules package-lock.json
+          npm cache clean --force
 
-    # Install Frontend Dependencies
-    - name: Install Frontend Dependencies
-      working-directory: frontend
-      run: npm install
+      # Install Frontend Dependencies
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm install
 
-    # Debug package.json
-    - name: Debug Package.json
-      working-directory: frontend
-      run: cat package.json
+      # Build Frontend
+      - name: Build Frontend
+        working-directory: frontend
+        run: npm run build
 
-    # Build Frontend (CRA)
-    - name: Build Frontend
-      working-directory: frontend
-      run: npm run build
-
-    # Optional tests
-    - name: Run Backend Tests
-      working-directory: backend
-      run: echo "Skipping tests for demo"
+      # Backend Tests (Optional)
+      - name: Run Backend Tests
+        working-directory: backend
+        run: echo "Skipping tests for demo"
 
 ##############################################################
 # 2) DOCKER BUILD & PUSH TO ECR
@@ -68,83 +65,85 @@ jobs:
     needs: build-test
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
-    # Build Backend Docker Image
-    - name: Build Backend Image
-      run: |
-        docker build -t $ECR_REPO:${{ env.BACKEND_IMAGE }} ./backend
-        docker tag $ECR_REPO:${{ env.BACKEND_IMAGE }} \
-          ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.BACKEND_IMAGE }}
+      # Build Backend Image
+      - name: Build Backend Image
+        run: |
+          docker build -t $ECR_REPO:${{ env.BACKEND_IMAGE }} ./backend
+          docker tag $ECR_REPO:${{ env.BACKEND_IMAGE }} \
+            ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.BACKEND_IMAGE }}
 
-    # Build Frontend Docker Image
-    - name: Build Frontend Image
-      run: |
-        docker build -t $ECR_REPO:${{ env.FRONTEND_IMAGE }} ./frontend
-        docker tag $ECR_REPO:${{ env.FRONTEND_IMAGE }} \
-          ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.FRONTEND_IMAGE }}
+      # Build Frontend Image
+      - name: Build Frontend Image
+        run: |
+          docker build -t $ECR_REPO:${{ env.FRONTEND_IMAGE }} ./frontend
+          docker tag $ECR_REPO:${{ env.FRONTEND_IMAGE }} \
+            ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.FRONTEND_IMAGE }}
 
-    # Push Backend Image
-    - name: Push Backend Image
-      run: |
-        docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.BACKEND_IMAGE }}
+      # Push Backend Image
+      - name: Push Backend Image
+        run: |
+          docker push \
+            ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.BACKEND_IMAGE }}
 
-    # Push Frontend Image
-    - name: Push Frontend Image
-      run: |
-        docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.FRONTEND_IMAGE }}
-
+      # Push Frontend Image
+      - name: Push Frontend Image
+        run: |
+          docker push \
+            ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.FRONTEND_IMAGE }}
 
 ##############################################################
 # 3) DEPLOY TO EKS USING HELM
 ##############################################################
-deploy-eks:
-  runs-on: ubuntu-latest
-  needs: docker-build-push
+  deploy-eks:
+    runs-on: ubuntu-latest
+    needs: docker-build-push
 
-  steps:
-  - name: Checkout Code
-    uses: actions/checkout@v4
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-  - name: Configure AWS Credentials
-    uses: aws-actions/configure-aws-credentials@v4
-    with:
-      aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
-      aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
-      aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-  - name: Update kubeconfig for EKS
-    run: |
-      aws eks update-kubeconfig \
-        --name ${{ secrets.EKS_CLUSTER_NAME }} \
-        --region ${{ env.AWS_REGION }}
+      - name: Update kubeconfig for EKS
+        run: |
+          aws eks update-kubeconfig \
+            --name ${{ secrets.EKS_CLUSTER_NAME }} \
+            --region ${{ env.AWS_REGION }}
 
-  - name: Deploy Banking App via Helm
-    run: |
-      helm upgrade --install banking-app ./helm \
-        --namespace default \
-        --wait \
-        --timeout 10m \
-        --atomic \
-        --set image.backend.repository=${{ secrets.ECR_REGISTRY }}/$ECR_REPO \
-        --set image.backend.tag=${{ env.BACKEND_IMAGE }} \
-        --set image.frontend.repository=${{ secrets.ECR_REGISTRY }}/$ECR_REPO \
-        --set image.frontend.tag=${{ env.FRONTEND_IMAGE }} \
-        --set ingress.enabled=false
+      - name: Deploy Banking App via Helm
+        run: |
+          helm upgrade --install banking-app ./helm \
+            --namespace default \
+            --create-namespace \
+            --wait \
+            --timeout 10m \
+            --atomic \
+            --set image.backend.repository=${{ secrets.ECR_REGISTRY }}/$ECR_REPO \
+            --set image.backend.tag=${{ env.BACKEND_IMAGE }} \
+            --set image.frontend.repository=${{ secrets.ECR_REGISTRY }}/$ECR_REPO \
+            --set image.frontend.tag=${{ env.FRONTEND_IMAGE }} \
+            --set ingress.enabled=false
 
-  - name: Verify Rollout
-    run: |
-      kubectl rollout status deployment/banking-app-backend --namespace default
-      kubectl rollout status deployment/banking-app-frontend --namespace default
+      - name: Verify Rollout
+        run: |
+          kubectl rollout status deployment/banking-app-backend --namespace default
+          kubectl rollout status deployment/banking-app-frontend --namespace default
