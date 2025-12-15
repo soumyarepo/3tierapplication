@@ -21,3 +21,30 @@ service:
 
 ingress:
   enabled: false
+
+replicaCount: 2
+
+image:
+  backend:
+    repository: 096803082838.dkr.ecr.ap-south-1.amazonaws.com/3tierbanking-app
+    tag: backend
+    pullPolicy: Always
+
+  frontend:
+    repository: 096803082838.dkr.ecr.ap-south-1.amazonaws.com/3tierbanking-app
+    tag: frontend
+    pullPolicy: Always
+
+service:
+  backend:
+    port: 8080
+  frontend:
+    port: 80
+
+service:
+  type: LoadBalancer
+
+db:
+  secretName: rds-secret
+  migrationConfigMap: db-migration-configmap
+

@@ -106,44 +106,45 @@ jobs:
       run: |
         docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:${{ env.FRONTEND_IMAGE }}
 
+
 ##############################################################
 # 3) DEPLOY TO EKS USING HELM
 ##############################################################
-  deploy-eks:
-    runs-on: ubuntu-latest
-    needs: docker-build-push
+deploy-eks:
+  runs-on: ubuntu-latest
+  needs: docker-build-push
 
-    steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+  steps:
+  - name: Checkout Code
+    uses: actions/checkout@v4
 
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+  - name: Configure AWS Credentials
+    uses: aws-actions/configure-aws-credentials@v4
+    with:
+      aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+      aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
+      aws-region: ${{ env.AWS_REGION }}
 
-    - name: Update kubeconfig for EKS
-      run: |
-        aws eks update-kubeconfig \
-          --name ${{ secrets.EKS_CLUSTER_NAME }} \
-          --region ${{ env.AWS_REGION }}
+  - name: Update kubeconfig for EKS
+    run: |
+      aws eks update-kubeconfig \
+        --name ${{ secrets.EKS_CLUSTER_NAME }} \
+        --region ${{ env.AWS_REGION }}
 
-    - name: Deploy Backend & Frontend using Helm
-      run: |
-        helm upgrade --install banking-app ./helm --timeout 10m --wait --atomic \
-          --namespace default \
-          --set image.repository=${{ steps.login-ecr.outputs.registry }}/$ECR_REPO \
-          --set image.tag=${{ env.BACKEND_IMAGE }}
-        
-        helm upgrade --install banking-app ./helm --timeout 10m --wait --atomic \
-          --namespace default \
-          --set image.repository=${{ steps.login-ecr.outputs.registry }}/$ECR_REPO \
-          --set image.tag=${{ env.FRONTEND_IMAGE }}
+  - name: Deploy Banking App via Helm
+    run: |
+      helm upgrade --install banking-app ./helm \
+        --namespace default \
+        --wait \
+        --timeout 10m \
+        --atomic \
+        --set image.backend.repository=${{ secrets.ECR_REGISTRY }}/$ECR_REPO \
+        --set image.backend.tag=${{ env.BACKEND_IMAGE }} \
+        --set image.frontend.repository=${{ secrets.ECR_REGISTRY }}/$ECR_REPO \
+        --set image.frontend.tag=${{ env.FRONTEND_IMAGE }} \
+        --set ingress.enabled=false
 
-    - name: Wait for Pods Ready
-      run: |
-        kubectl rollout status deployment/backend-deployment --namespace default
-        kubectl rollout status deployment/frontend-deployment --namespace default
-
+  - name: Verify Rollout
+    run: |
+      kubectl rollout status deployment/banking-app-backend --namespace default
+      kubectl rollout status deployment/banking-app-frontend --namespace default

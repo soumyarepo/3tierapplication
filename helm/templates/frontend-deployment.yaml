@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "fullname" . }}-frontend
+  name: {{ include "banking.fullname" . }}-frontend
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -14,6 +14,6 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          image: "{{ .Values.image.frontend.repository }}:{{ .Values.image.frontend.tag }}"
           ports:
-            - containerPort: {{ .Values.frontend.port }}
+            - containerPort: 80
