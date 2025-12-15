@@ -99,67 +99,72 @@ jobs:
             $ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/$ECR_REPO:$FRONTEND_IMAGE
 
 ##############################################################
-# 3) DEPLOY TO EKS USING HELM (WITH DB SECRET)
+# 3) DEPLOY TO EKS USING HELM (CLEAN INSTALL)
 ##############################################################
-  deploy-eks:
-    runs-on: ubuntu-latest
-    needs: docker-build-push
+deploy-eks:
+  runs-on: ubuntu-latest
+  needs: docker-build-push
 
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+  steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
 
-      - name: Update kubeconfig for EKS
-        run: |
-          aws eks update-kubeconfig \
-            --name ${{ secrets.EKS_CLUSTER_NAME }} \
-            --region ${{ env.AWS_REGION }}
+    - name: Update kubeconfig for EKS
+      run: |
+        aws eks update-kubeconfig \
+          --name ${{ secrets.EKS_CLUSTER_NAME }} \
+          --region ${{ env.AWS_REGION }}
 
-      - name: Set ECR Registry
-        run: |
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          echo "ECR_REGISTRY=$ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com" >> $GITHUB_ENV
+    - name: Ensure Clean Helm Release
+      run: |
+        echo "Checking if Helm release 'banking-app' exists..."
+        if helm list -n default -q | grep -w banking-app; then
+          echo "Release exists. Uninstalling..."
+          helm uninstall banking-app -n default
+          echo "Uninstallation completed."
+        else
+          echo "No existing release found."
+        fi
 
-      - name: Recreate RDS Secret
-        run: |
-          echo "Checking existing RDS secret..."
-          kubectl delete secret rds-secret -n $K8S_NAMESPACE --ignore-not-found
+    - name: Create/Update RDS Secret
+      run: |
+        echo "Creating/updating RDS secret..."
+        if kubectl get secret rds-secret -n default > /dev/null 2>&1; then
+          kubectl delete secret rds-secret -n default
+        fi
+        kubectl create secret generic rds-secret \
+          --namespace default \
+          --from-literal=host="${{ secrets.RDS_HOST }}" \
+          --from-literal=port="${{ secrets.RDS_PORT }}" \
+          --from-literal=username="${{ secrets.RDS_USERNAME }}" \
+          --from-literal=password="${{ secrets.RDS_PASSWORD }}" \
+          --from-literal=dbname="${{ secrets.RDS_DBNAME }}"
+        echo "RDS secret created."
 
-          echo "Creating RDS secret..."
-          kubectl create secret generic rds-secret \
-            --namespace $K8S_NAMESPACE \
-            --from-literal=MYSQL_HOST="${{ secrets.RDS_HOST }}" \
-            --from-literal=MYSQL_PORT="${{ secrets.RDS_PORT }}" \
-            --from-literal=MYSQL_USER="${{ secrets.RDS_USERNAME }}" \
-            --from-literal=MYSQL_PASSWORD="${{ secrets.RDS_PASSWORD }}" \
-            --from-literal=MYSQL_DATABASE="${{ secrets.RDS_DBNAME }}"
+    - name: Deploy Banking App via Helm (Clean Install)
+      run: |
+        helm upgrade --install banking-app ./helm \
+          --namespace default \
+          --create-namespace \
+          --wait \
+          --timeout 10m \
+          --atomic \
+          --set db.secretName=rds-secret \
+          --set db.migrationConfigMap=db-migration-configmap \
+          --set image.backend.repository=${{ steps.login-ecr.outputs.registry }}/$ECR_REPO \
+          --set image.backend.tag=$BACKEND_IMAGE \
+          --set image.frontend.repository=${{ steps.login-ecr.outputs.registry }}/$ECR_REPO \
+          --set image.frontend.tag=$FRONTEND_IMAGE \
+          --set ingress.enabled=false
 
-          kubectl get secret rds-secret -n $K8S_NAMESPACE
-
-      - name: Deploy Banking App via Helm
-        run: |
-          helm upgrade --install banking-app ./helm \
-            --namespace $K8S_NAMESPACE \
-            --create-namespace \
-            --wait \
-            --timeout 10m \
-            --atomic \
-            --set db.secretName=rds-secret \
-            --set db.migrationConfigMap=db-migration-configmap \
-            --set image.backend.repository=$ECR_REGISTRY/$ECR_REPO \
-            --set image.backend.tag=$BACKEND_IMAGE \
-            --set image.frontend.repository=$ECR_REGISTRY/$ECR_REPO \
-            --set image.frontend.tag=$FRONTEND_IMAGE \
-            --set ingress.enabled=false
-
-      - name: Verify Rollout
-        run: |
-          kubectl rollout status deployment/banking-app-backend -n $K8S_NAMESPACE
-          kubectl rollout status deployment/banking-app-frontend -n $K8S_NAMESPACE
+    - name: Verify Rollout
+      run: |
+        kubectl rollout status deployment/banking-app-backend -n default
+        kubectl rollout status deployment/banking-app-frontend -n default
