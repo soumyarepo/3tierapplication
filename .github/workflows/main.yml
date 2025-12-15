@@ -15,9 +15,9 @@ env:
   FRONTEND_IMAGE: frontend
 
 jobs:
-##############################################################
-# 1) BUILD & TEST
-##############################################################
+  ##############################################################
+  # 1) BUILD & TEST
+  ##############################################################
   build-test:
     runs-on: ubuntu-latest
 
@@ -54,9 +54,9 @@ jobs:
         working-directory: backend
         run: echo "Skipping tests for demo"
 
-##############################################################
-# 2) DOCKER BUILD & PUSH TO ECR
-##############################################################
+  ##############################################################
+  # 2) DOCKER BUILD & PUSH TO ECR
+  ##############################################################
   docker-build-push:
     runs-on: ubuntu-latest
     needs: build-test
@@ -102,9 +102,9 @@ jobs:
           echo "Pushing frontend image..."
           docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$FRONTEND_IMAGE
 
-##############################################################
-# 3) DEPLOY TO EKS USING HELM (WITH DB SECRET)
-##############################################################
+  ##############################################################
+  # 3) DEPLOY TO EKS USING HELM (WITH DB SECRET)
+  ##############################################################
   deploy-eks:
     runs-on: ubuntu-latest
     needs: docker-build-push
@@ -126,19 +126,35 @@ jobs:
             --name ${{ secrets.EKS_CLUSTER_NAME }} \
             --region ${{ env.AWS_REGION }}
 
+      ##########################################################
       # Create / Update RDS Secret (idempotent)
+      ##########################################################
       - name: Create / Update RDS Secret
         run: |
+          echo "Checking if RDS secret exists..."
+          if kubectl get secret rds-secret -n default > /dev/null 2>&1; then
+            echo "RDS secret exists. Deleting..."
+            kubectl delete secret rds-secret -n default
+            echo "Secret deleted successfully."
+          else
+            echo "No existing RDS secret found."
+          fi
+
+          echo "Creating new RDS secret..."
           kubectl create secret generic rds-secret \
             --namespace default \
             --from-literal=host=${{ secrets.RDS_HOST }} \
             --from-literal=port=${{ secrets.RDS_PORT }} \
             --from-literal=username=${{ secrets.RDS_USERNAME }} \
             --from-literal=password=${{ secrets.RDS_PASSWORD }} \
-            --from-literal=dbname=${{ secrets.RDS_DBNAME }} \
-            --dry-run=client -o yaml | kubectl apply -f -
+            --from-literal=dbname=${{ secrets.RDS_DBNAME }}
 
-      # Helm Deploy (DB migration runs via pre-install hook)
+          echo "New RDS secret created:"
+          kubectl get secret rds-secret -n default -o yaml
+
+      ##########################################################
+      # Helm Deploy
+      ##########################################################
       - name: Deploy Banking App via Helm
         run: |
           helm upgrade --install banking-app ./helm \
