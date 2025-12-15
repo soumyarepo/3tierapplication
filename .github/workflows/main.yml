@@ -113,34 +113,24 @@ jobs:
             --name ${{ secrets.EKS_CLUSTER_NAME }} \
             --region ${{ env.AWS_REGION }}
 
-      - name: Ensure Clean Helm Release
+      - name: Clean Stuck Helm Release (if any)
         run: |
           RELEASE_NAME="banking-app"
-          NAMESPACE="default"
-          echo "Checking Helm release status..."
-          if helm list -n $NAMESPACE -q | grep -w $RELEASE_NAME >/dev/null 2>&1; then
-            STATUS=$(helm status $RELEASE_NAME -n $NAMESPACE | grep 'STATUS:' | awk '{print $2}')
-            echo "Current Helm status: $STATUS"
-            if [[ "$STATUS" == "pending-install" || "$STATUS" == "pending-upgrade" || "$STATUS" == "pending-rollback" ]]; then
-              echo "Release is stuck. Deleting Helm release..."
-              helm uninstall $RELEASE_NAME -n $NAMESPACE
-              echo "Deleted stuck Helm release."
-            else
-              echo "Release exists. Uninstalling for clean install..."
-              helm uninstall $RELEASE_NAME -n $NAMESPACE
-            fi
-          else
-            echo "No existing release found. Safe to install."
-          fi
+          NAMESPACE="${{ env.K8S_NAMESPACE }}"
+          echo "Cleaning any stuck Helm releases..."
+          helm uninstall $RELEASE_NAME -n $NAMESPACE || true
+          kubectl -n $NAMESPACE delete secret -l name=$RELEASE_NAME || true
+          kubectl -n $NAMESPACE delete configmap -l name=$RELEASE_NAME || true
+          sleep 5
 
       - name: Create/Update RDS Secret
         run: |
           echo "Creating/updating RDS secret..."
-          if kubectl get secret rds-secret -n default > /dev/null 2>&1; then
-            kubectl delete secret rds-secret -n default
+          if kubectl get secret rds-secret -n ${{ env.K8S_NAMESPACE }} > /dev/null 2>&1; then
+            kubectl delete secret rds-secret -n ${{ env.K8S_NAMESPACE }}
           fi
           kubectl create secret generic rds-secret \
-            --namespace default \
+            --namespace ${{ env.K8S_NAMESPACE }} \
             --from-literal=host="${{ secrets.RDS_HOST }}" \
             --from-literal=port="${{ secrets.RDS_PORT }}" \
             --from-literal=username="${{ secrets.RDS_USERNAME }}" \
@@ -150,21 +140,23 @@ jobs:
 
       - name: Deploy Banking App via Helm (Clean Install)
         run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_REGISTRY="$ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
           helm upgrade --install banking-app ./helm \
-            --namespace default \
+            --namespace ${{ env.K8S_NAMESPACE }} \
             --create-namespace \
             --wait \
             --timeout 10m \
             --atomic \
             --set db.secretName=rds-secret \
             --set db.migrationConfigMap=db-migration-configmap \
-            --set image.backend.repository=${{ steps.login-ecr.outputs.registry }}/$ECR_REPO \
+            --set image.backend.repository=$ECR_REGISTRY/$ECR_REPO \
             --set image.backend.tag=$BACKEND_IMAGE \
-            --set image.frontend.repository=${{ steps.login-ecr.outputs.registry }}/$ECR_REPO \
+            --set image.frontend.repository=$ECR_REGISTRY/$ECR_REPO \
             --set image.frontend.tag=$FRONTEND_IMAGE \
             --set ingress.enabled=false
 
       - name: Verify Rollout
         run: |
-          kubectl rollout status deployment/banking-app-backend -n default
-          kubectl rollout status deployment/banking-app-frontend -n default
+          kubectl rollout status deployment/banking-app-backend -n ${{ env.K8S_NAMESPACE }}
+          kubectl rollout status deployment/banking-app-frontend -n ${{ env.K8S_NAMESPACE }}
