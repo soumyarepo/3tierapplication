@@ -127,15 +127,15 @@ jobs:
         run: |
           echo "Creating/updating RDS secret..."
           if kubectl get secret rds-secret -n ${{ env.K8S_NAMESPACE }} > /dev/null 2>&1; then
-            kubectl delete secret rds-secret -n ${{ env.K8S_NAMESPACE }}
+            kubectl delete secret rds-secret -n ${{ env.K8S_NAMESPACE }} --ignore-not-found
           fi
           kubectl create secret generic rds-secret \
             --namespace ${{ env.K8S_NAMESPACE }} \
-            --from-literal=host="${{ secrets.RDS_HOST }}" \
-            --from-literal=port="${{ secrets.RDS_PORT }}" \
-            --from-literal=username="${{ secrets.RDS_USERNAME }}" \
-            --from-literal=password="${{ secrets.RDS_PASSWORD }}" \
-            --from-literal=dbname="${{ secrets.RDS_DBNAME }}"
+            --from-literal=host="${{ secrets.RDS_HOST }}" | tr -d '\n')" \
+            --from-literal=port="${{ secrets.RDS_PORT }}" | tr -d '\n')" \
+            --from-literal=username="${{ secrets.RDS_USERNAME }}" | tr -d '\n')" \
+            --from-literal=password="${{ secrets.RDS_PASSWORD }}" | tr -d '\n')" \
+            --from-literal=dbname="${{ secrets.RDS_DBNAME }} " | tr -d '\n')"
           echo "RDS secret created."
 
       - name: Deploy Banking App via Helm (Clean Install)
