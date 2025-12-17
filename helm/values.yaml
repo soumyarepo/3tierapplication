@@ -48,3 +48,10 @@ db:
   secretName: rds-secret
   migrationConfigMap: db-migration-configmap
 
+rds:
+  host: banking-mysql.ctek4ma6atd4.ap-south-1.rds.amazonaws.com
+  username: dbuser
+  password: soumya987
+  dbname: bankingdb
+
+
