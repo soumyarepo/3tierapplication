@@ -10,7 +10,6 @@ next();
 } catch (e) {
 res.status(401).json({ message: 'Invalid token' });
 }
-}
 
 
 router.get('/', auth, async (req, res) => {
