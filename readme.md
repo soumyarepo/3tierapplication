@@ -245,3 +245,41 @@ SQL scripts located in Helm ConfigMap db-migration-configmap.yaml
 Migration Job db-migrate-job.yaml runs inside cluster, ensuring secure connectivity
 
 No need for public RDS access from GitHub Actions
+==================================================================
+soumya@DESKTOP-AE8RNVJ:~/easyrsa/pki$ aws acm import-certificate \
+  --certificate fileb:///home/soumya/easyrsa/pki/issued/client1.crt \
+  --private-key fileb:///home/soumya/easyrsa/pki/private/client1.key \
+  --certificate-chain fileb:///home/soumya/easyrsa/pki/ca.crt \
+  --region ap-south-1
+{
+    "CertificateArn": "arn:aws:acm:ap-south-1:096803082838:certificate/9c1f01c6-43af-45fc-b74d-54535e423923"
+}
+
+
+soumya@DESKTOP-AE8RNVJ:~/easyrsa/pki$ aws acm import-certificate \
+  --certificate fileb:///home/soumya/easyrsa/pki/issued/server_leaf.crt \
+  --private-key fileb:///home/soumya/easyrsa/pki/private/server.key \
+  --certificate-chain fileb:///home/soumya/easyrsa/pki/ca.crt \
+  --region ap-south-1
+{
+    "CertificateArn": "arn:aws:acm:ap-south-1:096803082838:certificate/174d692b-afba-41b9-8dd2-6f8efde09f5f"
+}
+sou
+
+
+ git config --global user.email "ranjan.soumya@8055.com"
+ git config --global user.name "Soumya Ranjan"
+
+ls -R | sed -e 's/:$//' -e 's/[^-][^\/]*\//--/g' -e 's/^/ /'
+
+ aws eks update-kubeconfig --name ncl-cluster --region ap-south-1
+
+ terraform apply   -var="cluster_name=ncl-cluster"   -var="nodegroup_name=ncl-node-group"   -var="db_username=dbuser"   -var="db_password=soumya987"   -auto-approve
+ terraform destroy   -var="cluster_name=ncl-cluster"   -var="nodegroup_name=ncl-node-group"   -var="db_username=dbuser"   -var="db_password=soumya987"   -auto-approve
+   74  history
+
+kubectl logs pod/banking-app-banking-app-db-migrate-5wnpx
+
+
+
+

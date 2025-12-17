@@ -1,8 +1,3 @@
--- =====================================================
--- MySQL 8.x schema (NO database creation here)
--- Database is selected by MYSQL_DATABASE
--- =====================================================
-
 -- USERS TABLE
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -18,6 +13,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     balance DECIMAL(12,2) DEFAULT 0.00,
     account_number VARCHAR(20) NOT NULL UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_accounts_user (user_id),
     CONSTRAINT fk_accounts_user
         FOREIGN KEY (user_id)
         REFERENCES users(id)
@@ -31,6 +27,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     to_account INT NOT NULL,
     amount DECIMAL(12,2) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_tx_from (from_account),
+    INDEX idx_tx_to (to_account),
     CONSTRAINT fk_transactions_from
         FOREIGN KEY (from_account)
         REFERENCES accounts(id),
@@ -38,11 +36,3 @@ CREATE TABLE IF NOT EXISTS transactions (
         FOREIGN KEY (to_account)
         REFERENCES accounts(id)
 ) ENGINE=InnoDB;
-
--- INDEXES
-ALTER TABLE accounts
-    ADD INDEX idx_accounts_user (user_id);
-
-ALTER TABLE transactions
-    ADD INDEX idx_tx_from (from_account),
-    ADD INDEX idx_tx_to (to_account);
