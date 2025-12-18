@@ -121,26 +121,27 @@ jobs:
         run: |
           RELEASE_NAME="banking-app"
           NAMESPACE="${{ env.K8S_NAMESPACE }}"
-          echo "Cleaning any stuck Helm releases..."
           helm uninstall $RELEASE_NAME -n $NAMESPACE || true
-          kubectl -n $NAMESPACE delete secret -l name=$RELEASE_NAME || true
-          kubectl -n $NAMESPACE delete configmap -l name=$RELEASE_NAME || true
           sleep 5
 
-      - name: Create/Update RDS Secret (newline-safe)
-        run: |
-          echo "Creating/updating RDS secret..."
-          kubectl delete secret rds-secret -n ${{ env.K8S_NAMESPACE }} --ignore-not-found
-
-          kubectl create secret generic rds-secret \
-            --namespace ${{ env.K8S_NAMESPACE }} \
-            --from-literal=host="$(echo -n "${{ secrets.RDS_HOST }}" | tr -d '\n')" \
-            --from-literal=port="$(echo -n "${{ secrets.RDS_PORT }}" | tr -d '\n')" \
-            --from-literal=username="$(echo -n "${{ secrets.RDS_USERNAME }}" | tr -d '\n')" \
-            --from-literal=password="$(echo -n "${{ secrets.RDS_PASSWORD }}" | tr -d '\n')" \
-            --from-literal=dbname="$(echo -n "${{ secrets.RDS_DBNAME }}" | tr -d '\n')"
-
-          echo "RDS secret created."
+      ########################################################
+      # ❌ DISABLED: Manual RDS Secret Creation
+      # Helm now manages the secret (CORRECT)
+      ########################################################
+      # - name: Create/Update RDS Secret (newline-safe)
+      #   run: |
+      #     echo "Creating/updating RDS secret..."
+      #     kubectl delete secret rds-secret -n ${{ env.K8S_NAMESPACE }} --ignore-not-found
+      #
+      #     kubectl create secret generic rds-secret \
+      #       --namespace ${{ env.K8S_NAMESPACE }} \
+      #       --from-literal=host="${{ secrets.RDS_HOST }}" \
+      #       --from-literal=port="${{ secrets.RDS_PORT }}" \
+      #       --from-literal=username="${{ secrets.RDS_USERNAME }}" \
+      #       --from-literal=password="${{ secrets.RDS_PASSWORD }}" \
+      #       --from-literal=dbname="${{ secrets.RDS_DBNAME }}"
+      #
+      #     echo "RDS secret created."
 
       - name: Deploy Banking App via Helm
         run: |
@@ -154,7 +155,6 @@ jobs:
             --timeout 10m \
             --atomic \
             --set db.secretName=rds-secret \
-            --set db.migrationConfigMap=db-migration-configmap \
             --set image.backend.repository=$ECR_REGISTRY/$ECR_REPO \
             --set image.backend.tag=$BACKEND_IMAGE \
             --set image.frontend.repository=$ECR_REGISTRY/$ECR_REPO \
