@@ -15,7 +15,6 @@ spec:
       containers:
         - name: backend
           image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
-          imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
           ports:
             - containerPort: 8080
           env:
@@ -23,19 +22,19 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.db.secretName }}
-                  key: RDS_HOST
+                  key: host       # lowercase
             - name: DB_USER
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.db.secretName }}
-                  key: RDS_USERNAME
+                  key: username   # lowercase
             - name: DB_PASS
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.db.secretName }}
-                  key: RDS_PASSWORD
+                  key: password   # lowercase
             - name: DB_NAME
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.db.secretName }}
-                  key: RDS_DBNAME
+                  key: dbname     # lowercase
