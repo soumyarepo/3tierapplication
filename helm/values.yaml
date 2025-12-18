@@ -1,48 +1,21 @@
 replicaCount: 2
 
-backend:
-  image:
-    repository: 096803082838.dkr.ecr.ap-south-1.amazonaws.com/3tierbanking-app
-    tag: backend
-  port: 8080
-
-frontend:
-  image:
-    repository: 096803082838.dkr.ecr.ap-south-1.amazonaws.com/3tierbanking-app
-    tag: frontend
-  port: 80
-
-db:
-  secretName: rds-secret
-  migrationConfigMap: db-migration-scripts
-
-service:
-  type: LoadBalancer
-
-ingress:
-  enabled: false
-
-replicaCount: 2
-
 image:
   backend:
     repository: 096803082838.dkr.ecr.ap-south-1.amazonaws.com/3tierbanking-app
     tag: backend
     pullPolicy: Always
-
   frontend:
     repository: 096803082838.dkr.ecr.ap-south-1.amazonaws.com/3tierbanking-app
     tag: frontend
     pullPolicy: Always
 
 service:
+  type: LoadBalancer
   backend:
     port: 8080
   frontend:
     port: 80
-
-service:
-  type: LoadBalancer
 
 db:
   secretName: rds-secret
@@ -54,4 +27,5 @@ rds:
   password: soumya987
   dbname: bankingdb
 
-
+ingress:
+  enabled: false
