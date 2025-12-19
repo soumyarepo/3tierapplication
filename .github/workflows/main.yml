@@ -14,67 +14,82 @@ env:
   K8S_NAMESPACE: default
   RELEASE_NAME: banking-app
 
+##############################################################
+# 1) BUILD & TEST
+##############################################################
 jobs:
   build-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 18
+
       - name: Install Backend Dependencies
         working-directory: backend
         run: npm install
+
       - name: Install Frontend Dependencies
         working-directory: frontend
         run: npm install
+
       - name: Build Frontend
         working-directory: frontend
         run: npm run build
 
+##############################################################
+# 2) DOCKER BUILD & PUSH
+##############################################################
   docker-build-push:
     runs-on: ubuntu-latest
     needs: build-test
     steps:
       - uses: actions/checkout@v4
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+
       - uses: aws-actions/amazon-ecr-login@v2
+
       - name: Build & Push Images
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           ECR="$ACCOUNT_ID.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-          # Backend
           docker build -t $ECR_REPO:$BACKEND_IMAGE ./backend
           docker tag $ECR_REPO:$BACKEND_IMAGE $ECR/$ECR_REPO:$BACKEND_IMAGE
           docker push $ECR/$ECR_REPO:$BACKEND_IMAGE
 
-          # Frontend
           docker build -t $ECR_REPO:$FRONTEND_IMAGE ./frontend
           docker tag $ECR_REPO:$FRONTEND_IMAGE $ECR/$ECR_REPO:$FRONTEND_IMAGE
           docker push $ECR/$ECR_REPO:$FRONTEND_IMAGE
 
+##############################################################
+# 3) DEPLOY TO EKS
+##############################################################
   deploy-eks:
     runs-on: ubuntu-latest
     needs: docker-build-push
     steps:
       - uses: actions/checkout@v4
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+
       - name: Update kubeconfig
         run: |
-          aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region $AWS_REGION
-      - name: Cleanup Existing Helm Release
-        run: |
-          helm uninstall $RELEASE_NAME -n $K8S_NAMESPACE || true
-          sleep 5
+          aws eks update-kubeconfig \
+            --name ${{ secrets.EKS_CLUSTER_NAME }} \
+            --region $AWS_REGION
+
       - name: Deploy via Helm
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -92,75 +107,70 @@ jobs:
             --set image.frontend.repository=$ECR/$ECR_REPO \
             --set image.frontend.tag=$FRONTEND_IMAGE \
             --set ingress.enabled=false
-      - name: Verify Application Rollout
-        run: |
-          BACKEND="${RELEASE_NAME}-${RELEASE_NAME}-backend"
-          FRONTEND="${RELEASE_NAME}-${RELEASE_NAME}-frontend"
 
-          kubectl rollout status deployment/$BACKEND -n $K8S_NAMESPACE
-          kubectl rollout status deployment/$FRONTEND -n $K8S_NAMESPACE
-
+##############################################################
+# 4) DB MIGRATION VERIFICATION
+##############################################################
   verify-db-migration:
     runs-on: ubuntu-latest
     needs: deploy-eks
     steps:
-      - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+
       - name: Update kubeconfig
         run: |
-          aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
-      - name: Verify DB Migration Job Status
+          aws eks update-kubeconfig \
+            --name ${{ secrets.EKS_CLUSTER_NAME }} \
+            --region $AWS_REGION
+
+      - name: Verify DB Migration Job
         run: |
           DB_JOB="${RELEASE_NAME}-${RELEASE_NAME}-db-migrate"
-          echo "========================================"
-          echo "Verifying DB Migration Job"
-          echo "Job Name  : $DB_JOB"
-          echo "Namespace : $K8S_NAMESPACE"
-          echo "========================================"
 
-          if kubectl get job $DB_JOB -n $K8S_NAMESPACE; then
-            kubectl get job $DB_JOB -n $K8S_NAMESPACE
-            echo "----------------------------------------"
-            echo "DB Migration Pod Logs:"
-            POD_NAME=$(kubectl get pods -n $K8S_NAMESPACE -l job-name=$DB_JOB -o jsonpath='{.items[0].metadata.name}')
-            kubectl logs $POD_NAME -n $K8S_NAMESPACE
-          else
-            echo "DB Migration Job not found!"
-            exit 1
-          fi
+          kubectl wait \
+            --for=condition=complete \
+            job/$DB_JOB \
+            -n $K8S_NAMESPACE \
+            --timeout=5m
 
-  email-notification:
+          POD=$(kubectl get pods -n $K8S_NAMESPACE -l job-name=$DB_JOB -o jsonpath='{.items[0].metadata.name}')
+          kubectl logs $POD -n $K8S_NAMESPACE
+
+##############################################################
+# 5) GITHUB NATIVE NOTIFICATION (NO SMTP)
+##############################################################
+  notify:
     runs-on: ubuntu-latest
-    needs: [deploy-eks, verify-db-migration]
+    needs: verify-db-migration
     steps:
-      - name: Notify via GitHub (Native)
+      - name: GitHub Deployment Notification
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ github.token }}
           script: |
-            const release = process.env.RELEASE_NAME;
-            const namespace = process.env.K8S_NAMESPACE;
-
             const message = `
-Deployment Summary for Release: ${release}
-Namespace: ${namespace}
+🚀 Deployment Successful!
 
-✅ Build & Docker push completed
-✅ Helm deployment completed
-✅ DB migration verified successfully
+Release: ${process.env.RELEASE_NAME}
+Namespace: ${process.env.K8S_NAMESPACE}
+
+✅ Build completed
+✅ Docker images pushed
+✅ Helm deployment successful
+✅ DB migration verified
 `;
 
-            if (context.issue.number) {
-              github.issues.createComment({
+            if (context.payload.pull_request) {
+              await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: context.issue.number,
+                issue_number: context.payload.pull_request.number,
                 body: message
               });
             } else {
-              console.log("No PR context. Message:\n" + message);
+              console.log(message);
             }
