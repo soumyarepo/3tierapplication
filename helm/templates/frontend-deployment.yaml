@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "banking-app.fullname" . }}-frontend
+  name: {{ include "banking-app.fullname" . }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
