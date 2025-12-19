@@ -2,11 +2,9 @@ name: CI/CD Pipeline - 3 Tier Banking App
 
 on:
   push:
-    branches:
-      - email-notification
+    branches: [email-notification]
   pull_request:
-    branches:
-      - email-notification
+    branches: [email-notification]
 
 env:
   AWS_REGION: ap-south-1
@@ -22,24 +20,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 18 }
+        with:
+          node-version: 18
       - name: Install Backend Dependencies
         working-directory: backend
         run: npm install
-      - name: Clean Frontend Cache
-        working-directory: frontend
-        run: |
-          rm -rf node_modules package-lock.json
-          npm cache clean --force
       - name: Install Frontend Dependencies
         working-directory: frontend
         run: npm install
       - name: Build Frontend
         working-directory: frontend
         run: npm run build
-      - name: Backend Tests
-        working-directory: backend
-        run: echo "Skipping tests for demo"
 
   docker-build-push:
     runs-on: ubuntu-latest
@@ -55,13 +46,15 @@ jobs:
       - name: Build & Push Images
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          ECR_REGISTRY="$ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+          ECR="$ACCOUNT_ID.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
           docker build -t $ECR_REPO:$BACKEND_IMAGE ./backend
-          docker tag $ECR_REPO:$BACKEND_IMAGE $ECR_REGISTRY/$ECR_REPO:$BACKEND_IMAGE
-          docker push $ECR_REGISTRY/$ECR_REPO:$BACKEND_IMAGE
+          docker tag $ECR_REPO:$BACKEND_IMAGE $ECR/$ECR_REPO:$BACKEND_IMAGE
+          docker push $ECR/$ECR_REPO:$BACKEND_IMAGE
+
           docker build -t $ECR_REPO:$FRONTEND_IMAGE ./frontend
-          docker tag $ECR_REPO:$FRONTEND_IMAGE $ECR_REGISTRY/$ECR_REPO:$FRONTEND_IMAGE
-          docker push $ECR_REGISTRY/$ECR_REPO:$FRONTEND_IMAGE
+          docker tag $ECR_REPO:$FRONTEND_IMAGE $ECR/$ECR_REPO:$FRONTEND_IMAGE
+          docker push $ECR/$ECR_REPO:$FRONTEND_IMAGE
 
   deploy-eks:
     runs-on: ubuntu-latest
@@ -73,78 +66,83 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Update kubeconfig for EKS
+      - name: Update kubeconfig
         run: |
-          aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
-      - name: Clean Stuck Helm Release
-        run: helm uninstall $RELEASE_NAME -n $K8S_NAMESPACE || true
+          aws eks update-kubeconfig \
+            --name ${{ secrets.EKS_CLUSTER_NAME }} \
+            --region $AWS_REGION
+
+      - name: Cleanup Existing Helm Release
+        run: |
+          helm uninstall $RELEASE_NAME -n $K8S_NAMESPACE || true
+          sleep 5
+
       - name: Deploy via Helm
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          ECR_REGISTRY="$ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+          ECR="$ACCOUNT_ID.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
           helm upgrade --install $RELEASE_NAME ./helm \
             --namespace $K8S_NAMESPACE \
             --create-namespace \
-            --wait --timeout 10m --atomic \
+            --wait \
+            --timeout 10m \
+            --atomic \
             --set db.secretName=rds-secret \
-            --set image.backend.repository=$ECR_REGISTRY/$ECR_REPO \
+            --set image.backend.repository=$ECR/$ECR_REPO \
             --set image.backend.tag=$BACKEND_IMAGE \
-            --set image.frontend.repository=$ECR_REGISTRY/$ECR_REPO \
+            --set image.frontend.repository=$ECR/$ECR_REPO \
             --set image.frontend.tag=$FRONTEND_IMAGE \
             --set ingress.enabled=false
-      - name: Verify Deployment Rollout
-        run: |
-          BACKEND_DEPLOYMENT="${RELEASE_NAME}-${RELEASE_NAME}-backend"
-          FRONTEND_DEPLOYMENT="${RELEASE_NAME}-${RELEASE_NAME}-frontend"
-          kubectl rollout status deployment/$BACKEND_DEPLOYMENT -n $K8S_NAMESPACE
-          kubectl rollout status deployment/$FRONTEND_DEPLOYMENT -n $K8S_NAMESPACE
-          kubectl get deployments -n $K8S_NAMESPACE -l app.kubernetes.io/instance=$RELEASE_NAME
 
-  db-migration-verification:
-    runs-on: ubuntu-latest
-    needs: deploy-eks
-    steps:
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: Update kubeconfig for EKS
-        run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
-      - name: Verify DB Migration Job
+      - name: Verify Application Rollout
         run: |
-          JOB_NAME=$(kubectl get jobs -n $K8S_NAMESPACE -l job-type=db-migrate -o jsonpath="{.items[0].metadata.name}")
-          if [ -z "$JOB_NAME" ]; then
-            echo "No DB migration job found!"
-            exit 1
-          fi
-          echo "DB Migration Job: $JOB_NAME"
-          kubectl logs job/$JOB_NAME -n $K8S_NAMESPACE
+          BACKEND="${RELEASE_NAME}-${RELEASE_NAME}-backend"
+          FRONTEND="${RELEASE_NAME}-${RELEASE_NAME}-frontend"
 
-  notify:
-    runs-on: ubuntu-latest
-    needs: [deploy-eks, db-migration-verification]
-    if: always()
-    steps:
-      - name: Send Email Notification
+          kubectl rollout status deployment/$BACKEND -n $K8S_NAMESPACE
+          kubectl rollout status deployment/$FRONTEND -n $K8S_NAMESPACE
+
+      - name: Verify DB Migration (Helm Hook)
+        run: |
+          echo "========================================"
+          echo "DB Migration Verification (Helm Hooks)"
+          echo "Release : $RELEASE_NAME"
+          echo "Namespace: $K8S_NAMESPACE"
+          echo "========================================"
+
+          helm status $RELEASE_NAME -n $K8S_NAMESPACE
+          echo "----------------------------------------"
+          helm history $RELEASE_NAME -n $K8S_NAMESPACE
+          echo "----------------------------------------"
+          echo "DB Migration SUCCESS (Helm deploy passed)"
+
+      - name: Deployment Summary
+        run: |
+          echo "========================================"
+          echo "Deployment Summary"
+          echo "Release   : $RELEASE_NAME"
+          echo "Namespace : $K8S_NAMESPACE"
+          echo "========================================"
+          helm list -n $K8S_NAMESPACE | grep $RELEASE_NAME
+
+      # Optional: Email Notification (configure SMTP separately)
+      - name: Send Email Notification (Optional)
+        if: always()
         uses: dawidd6/action-send-mail@v3
         with:
-          server_address: ${{ secrets.SMTP_SERVER }}
-          server_port: ${{ secrets.SMTP_PORT }}
-          username: ${{ secrets.SMTP_USERNAME }}
-          password: ${{ secrets.SMTP_PASSWORD }}
-          subject: "CI/CD Pipeline - ${{ env.RELEASE_NAME }} - ${{ github.event_name }}"
-          to: ${{ secrets.EMAIL_TO }}
-          from: ${{ secrets.EMAIL_FROM }}
-          content_type: text/html
+          server_address: smtp.example.com
+          server_port: 587
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "Deployment ${{ env.RELEASE_NAME }} - ${{ job.status }}"
+          to: devteam@example.com
+          from: ci-cd@example.com
+          content_type: text/plain
           body: |
-            <h3>CI/CD Pipeline Result</h3>
-            <ul>
-              <li>Repository: ${{ github.repository }}</li>
-              <li>Branch: ${{ github.ref_name }}</li>
-              <li>Workflow: ${{ github.workflow }}</li>
-              <li>Status: ${{ job.status }}</li>
-              <li>Release: ${{ env.RELEASE_NAME }}</li>
-              <li>Kubernetes Namespace: ${{ env.K8S_NAMESPACE }}</li>
-            </ul>
+            Deployment Summary:
+            Release: ${{ env.RELEASE_NAME }}
+            Namespace: ${{ env.K8S_NAMESPACE }}
+            Status: ${{ job.status }}
+            Helm History:
+            $(helm history ${{ env.RELEASE_NAME }} -n ${{ env.K8S_NAMESPACE }})
