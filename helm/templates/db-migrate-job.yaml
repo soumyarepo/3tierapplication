@@ -45,25 +45,25 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.db.secretName }}
-                  key: host
+                  key: RDS_HOST
 
             - name: MYSQL_USER
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.db.secretName }}
-                  key: username
+                  key: RDS_USERNAME
 
             - name: MYSQL_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.db.secretName }}
-                  key: password
+                  key: RDS_PASSWORD
 
             - name: MYSQL_DATABASE
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.db.secretName }}
-                  key: dbname
+                  key: RDS_DBNAME
 
           volumeMounts:
             - name: scripts

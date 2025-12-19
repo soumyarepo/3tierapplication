@@ -22,19 +22,19 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.db.secretName }}
-                  key: host       # lowercase
+                  key: RDS_HOST
             - name: DB_USER
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.db.secretName }}
-                  key: username   # lowercase
+                  key: RDS_USERNAME
             - name: DB_PASS
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.db.secretName }}
-                  key: password   # lowercase
+                  key: RDS_PASSWORD
             - name: DB_NAME
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.db.secretName }}
-                  key: dbname     # lowercase
+                  key: RDS_DBNAME
