@@ -2,9 +2,9 @@ name: CI/CD Pipeline - 3 Tier Banking App
 
 on:
   push:
-    branches: [databaserds]
+    branches: [master]
   pull_request:
-    branches: [databaserds]
+    branches: [master]
 
 # --------------------------------------------------
 # GLOBAL ENV (single source of truth)
