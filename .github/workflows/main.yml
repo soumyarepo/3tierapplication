@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [email-notification]
 
+permissions:
+  contents: read
+
 env:
   AWS_REGION: ap-south-1
   ECR_REPO: 3tierbanking-app
@@ -145,6 +148,7 @@ jobs:
 # 5) SUCCESS NOTIFICATION (GitHub Native – NO TOKEN REQUIRED)
 ##############################################################
   success-notification:
+    name: Success Notification
     runs-on: ubuntu-latest
     needs:
       - deploy-eks
