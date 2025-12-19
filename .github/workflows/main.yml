@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [email-notification]
 
+# --------------------------------------------------
+# GLOBAL ENV (single source of truth)
+# --------------------------------------------------
 env:
   AWS_REGION: ap-south-1
   ECR_REPO: 3tierbanking-app
@@ -14,58 +17,78 @@ env:
   K8S_NAMESPACE: default
   RELEASE_NAME: banking-app
 
+##############################################################
+# 1) BUILD & TEST
+##############################################################
 jobs:
   build-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 18
+
       - name: Install Backend Dependencies
         working-directory: backend
         run: npm install
+
       - name: Install Frontend Dependencies
         working-directory: frontend
         run: npm install
+
       - name: Build Frontend
         working-directory: frontend
         run: npm run build
 
+##############################################################
+# 2) DOCKER BUILD & PUSH
+##############################################################
   docker-build-push:
     runs-on: ubuntu-latest
     needs: build-test
     steps:
       - uses: actions/checkout@v4
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+
       - uses: aws-actions/amazon-ecr-login@v2
+
       - name: Build & Push Images
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           ECR="$ACCOUNT_ID.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
+          # Backend
           docker build -t $ECR_REPO:$BACKEND_IMAGE ./backend
           docker tag $ECR_REPO:$BACKEND_IMAGE $ECR/$ECR_REPO:$BACKEND_IMAGE
           docker push $ECR/$ECR_REPO:$BACKEND_IMAGE
 
+          # Frontend
           docker build -t $ECR_REPO:$FRONTEND_IMAGE ./frontend
           docker tag $ECR_REPO:$FRONTEND_IMAGE $ECR/$ECR_REPO:$FRONTEND_IMAGE
           docker push $ECR/$ECR_REPO:$FRONTEND_IMAGE
 
+##############################################################
+# 3) DEPLOY TO EKS USING HELM
+##############################################################
   deploy-eks:
     runs-on: ubuntu-latest
     needs: docker-build-push
     steps:
       - uses: actions/checkout@v4
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+
       - name: Update kubeconfig
         run: |
           aws eks update-kubeconfig \
@@ -103,46 +126,69 @@ jobs:
           kubectl rollout status deployment/$BACKEND -n $K8S_NAMESPACE
           kubectl rollout status deployment/$FRONTEND -n $K8S_NAMESPACE
 
-      - name: Verify DB Migration (Helm Hook)
-        run: |
-          echo "========================================"
-          echo "DB Migration Verification (Helm Hooks)"
-          echo "Release : $RELEASE_NAME"
-          echo "Namespace: $K8S_NAMESPACE"
-          echo "========================================"
+##############################################################
+# 4) DB MIGRATION VERIFICATION JOB
+##############################################################
+  verify-db-migration:
+    runs-on: ubuntu-latest
+    needs: deploy-eks
+    steps:
+      - uses: actions/checkout@v4
 
-          helm status $RELEASE_NAME -n $K8S_NAMESPACE
-          echo "----------------------------------------"
-          helm history $RELEASE_NAME -n $K8S_NAMESPACE
-          echo "----------------------------------------"
-          echo "DB Migration SUCCESS (Helm deploy passed)"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Deployment Summary
+      - name: Update kubeconfig
         run: |
+          aws eks update-kubeconfig \
+            --name ${{ secrets.EKS_CLUSTER_NAME }} \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Verify DB Migration Job Status
+        run: |
+          DB_JOB="${RELEASE_NAME}-${RELEASE_NAME}-db-migrate"
           echo "========================================"
-          echo "Deployment Summary"
-          echo "Release   : $RELEASE_NAME"
+          echo "Verifying DB Migration Job"
+          echo "Job Name  : $DB_JOB"
           echo "Namespace : $K8S_NAMESPACE"
           echo "========================================"
-          helm list -n $K8S_NAMESPACE | grep $RELEASE_NAME
 
-      # Optional: Email Notification (configure SMTP separately)
-      - name: Send Email Notification (Optional)
-        if: always()
+          if kubectl get job $DB_JOB -n $K8S_NAMESPACE; then
+            kubectl get job $DB_JOB -n $K8S_NAMESPACE
+            echo "----------------------------------------"
+            echo "DB Migration Pod Logs:"
+            POD_NAME=$(kubectl get pods -n $K8S_NAMESPACE -l job-name=$DB_JOB -o jsonpath='{.items[0].metadata.name}')
+            kubectl logs $POD_NAME -n $K8S_NAMESPACE
+          else
+            echo "DB Migration Job not found!"
+            exit 1
+          fi
+
+##############################################################
+# 5) EMAIL NOTIFICATION JOB
+##############################################################
+  email-notification:
+    runs-on: ubuntu-latest
+    needs: [deploy-eks, verify-db-migration]
+    steps:
+      - name: Send Email Notification
         uses: dawidd6/action-send-mail@v3
         with:
-          server_address: smtp.example.com
+          server_address: smtp.gmail.com
           server_port: 587
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "Deployment ${{ env.RELEASE_NAME }} - ${{ job.status }}"
-          to: devteam@example.com
-          from: ci-cd@example.com
+          subject: "Banking App Deployment Status - ${{ env.RELEASE_NAME }}"
+          to: team@example.com
+          from: GitHub Actions <github-actions@example.com>
           content_type: text/plain
           body: |
-            Deployment Summary:
-            Release: ${{ env.RELEASE_NAME }}
+            Deployment Summary for Release: ${{ env.RELEASE_NAME }}
             Namespace: ${{ env.K8S_NAMESPACE }}
-            Status: ${{ job.status }}
-            Helm History:
-            $(helm history ${{ env.RELEASE_NAME }} -n ${{ env.K8S_NAMESPACE }})
+
+            ✅ Build & Docker push completed
+            ✅ Helm deployment completed
+            ✅ DB migration verified successfully

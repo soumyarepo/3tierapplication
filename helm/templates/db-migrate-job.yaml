@@ -2,12 +2,10 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{ include "banking-app.fullname" . }}-db-migrate
-  labels:
-    job-type: db-migrate
   annotations:
-    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-weight: "0"
-    helm.sh/hook-delete-policy: hook-succeeded, before-hook-creation
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 spec:
   backoffLimit: 3
   template:
@@ -28,14 +26,17 @@ spec:
                 sleep 5
               done
 
-              echo "Creating database if not exists..."
-              mysql -h "$MYSQL_HOST" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE;"
+              echo "Ensuring database exists..."
+              mysql -h "$MYSQL_HOST" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" \
+                -e "CREATE DATABASE IF NOT EXISTS \`$MYSQL_DATABASE\`;"
 
               echo "Running schema migration..."
-              mysql -h "$MYSQL_HOST" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" < /scripts/schema.sql
+              mysql -h "$MYSQL_HOST" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" \
+                "$MYSQL_DATABASE" < /scripts/schema.sql
 
               echo "Running seed data..."
-              mysql -h "$MYSQL_HOST" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" < /scripts/sample-data.sql
+              mysql -h "$MYSQL_HOST" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" \
+                "$MYSQL_DATABASE" < /scripts/sample-data.sql
 
               echo "DB migration completed"
 
@@ -44,22 +45,25 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.db.secretName }}
-                  key: host
+                  key: RDS_HOST
+
             - name: MYSQL_USER
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.db.secretName }}
-                  key: username
+                  key: RDS_USERNAME
+
             - name: MYSQL_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.db.secretName }}
-                  key: password
+                  key: RDS_PASSWORD
+
             - name: MYSQL_DATABASE
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.db.secretName }}
-                  key: dbname
+                  key: RDS_DBNAME
 
           volumeMounts:
             - name: scripts
