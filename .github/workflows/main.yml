@@ -14,10 +14,10 @@ env:
   K8S_NAMESPACE: default
   RELEASE_NAME: banking-app
 
+jobs:
 ##############################################################
 # 1) BUILD & TEST
 ##############################################################
-jobs:
   build-test:
     runs-on: ubuntu-latest
     steps:
@@ -105,16 +105,17 @@ jobs:
             --set image.backend.repository=$ECR/$ECR_REPO \
             --set image.backend.tag=$BACKEND_IMAGE \
             --set image.frontend.repository=$ECR/$ECR_REPO \
-            --set image.frontend.tag=$FRONTEND_IMAGE \
-            --set ingress.enabled=false
+            --set image.frontend.tag=$FRONTEND_IMAGE
 
 ##############################################################
-# 4) DB MIGRATION VERIFICATION
+# 4) VERIFY DB MIGRATION
 ##############################################################
   verify-db-migration:
     runs-on: ubuntu-latest
     needs: deploy-eks
     steps:
+      - uses: actions/checkout@v4
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
@@ -135,42 +136,38 @@ jobs:
             --for=condition=complete \
             job/$DB_JOB \
             -n $K8S_NAMESPACE \
-            --timeout=5m
+            --timeout=300s
 
-          POD=$(kubectl get pods -n $K8S_NAMESPACE -l job-name=$DB_JOB -o jsonpath='{.items[0].metadata.name}')
+          POD=$(kubectl get pod -n $K8S_NAMESPACE -l job-name=$DB_JOB -o jsonpath='{.items[0].metadata.name}')
           kubectl logs $POD -n $K8S_NAMESPACE
 
 ##############################################################
-# 5) GITHUB NATIVE NOTIFICATION (NO SMTP)
+# 5) SUCCESS NOTIFICATION (GitHub Native)
 ##############################################################
-  notify:
+  email-notification:
     runs-on: ubuntu-latest
-    needs: verify-db-migration
+    needs: [deploy-eks, verify-db-migration]
+    if: success()
     steps:
-      - name: GitHub Deployment Notification
+      - name: Notify Success via GitHub
         uses: actions/github-script@v7
         with:
-          github-token: ${{ github.token }}
           script: |
             const message = `
-🚀 Deployment Successful!
+            ✅ Deployment SUCCESSFUL
 
-Release: ${process.env.RELEASE_NAME}
-Namespace: ${process.env.K8S_NAMESPACE}
+            Release   : ${process.env.RELEASE_NAME}
+            Namespace : ${process.env.K8S_NAMESPACE}
 
-✅ Build completed
-✅ Docker images pushed
-✅ Helm deployment successful
-✅ DB migration verified
-`;
+            ✔ Build completed
+            ✔ Images pushed to ECR
+            ✔ Helm deployed
+            ✔ DB migration verified
+            `;
 
-            if (context.payload.pull_request) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                body: message
-              });
-            } else {
-              console.log(message);
-            }
+            github.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: message
+            });
