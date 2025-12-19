@@ -8,12 +8,16 @@ on:
     branches:
       - databaserds
 
+# --------------------------------------------------
+# GLOBAL ENV (single source of truth)
+# --------------------------------------------------
 env:
   AWS_REGION: ap-south-1
   ECR_REPO: 3tierbanking-app
   BACKEND_IMAGE: backend
   FRONTEND_IMAGE: frontend
   K8S_NAMESPACE: default
+  RELEASE_NAME: banking-app
 
 ##############################################################
 # 1) BUILD & TEST
@@ -53,7 +57,7 @@ jobs:
         run: echo "Skipping tests for demo"
 
 ##############################################################
-# 2) DOCKER BUILD & PUSH TO ECR
+# 2) DOCKER BUILD & PUSH
 ##############################################################
   docker-build-push:
     runs-on: ubuntu-latest
@@ -78,21 +82,16 @@ jobs:
       - name: Build Frontend Image
         run: docker build -t $ECR_REPO:$FRONTEND_IMAGE ./frontend
 
-      - name: Tag & Push Backend Image
+      - name: Tag & Push Images
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          docker tag $ECR_REPO:$BACKEND_IMAGE \
-            $ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/$ECR_REPO:$BACKEND_IMAGE
-          docker push \
-            $ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/$ECR_REPO:$BACKEND_IMAGE
+          ECR_REGISTRY="$ACCOUNT_ID.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-      - name: Tag & Push Frontend Image
-        run: |
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          docker tag $ECR_REPO:$FRONTEND_IMAGE \
-            $ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/$ECR_REPO:$FRONTEND_IMAGE
-          docker push \
-            $ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/$ECR_REPO:$FRONTEND_IMAGE
+          docker tag $ECR_REPO:$BACKEND_IMAGE $ECR_REGISTRY/$ECR_REPO:$BACKEND_IMAGE
+          docker push $ECR_REGISTRY/$ECR_REPO:$BACKEND_IMAGE
+
+          docker tag $ECR_REPO:$FRONTEND_IMAGE $ECR_REGISTRY/$ECR_REPO:$FRONTEND_IMAGE
+          docker push $ECR_REGISTRY/$ECR_REPO:$FRONTEND_IMAGE
 
 ##############################################################
 # 3) DEPLOY TO EKS USING HELM
@@ -115,41 +114,20 @@ jobs:
         run: |
           aws eks update-kubeconfig \
             --name ${{ secrets.EKS_CLUSTER_NAME }} \
-            --region ${{ env.AWS_REGION }}
-
-      - name: Clean Stuck Helm Release (if any)
-        run: |
-          RELEASE_NAME="banking-app"
-          NAMESPACE="${{ env.K8S_NAMESPACE }}"
-          helm uninstall $RELEASE_NAME -n $NAMESPACE || true
-          sleep 5
-
-      ########################################################
-      # ❌ DISABLED: Manual RDS Secret Creation
-      # Helm now manages the secret (CORRECT)
-      ########################################################
-      # - name: Create/Update RDS Secret (newline-safe)
-      #   run: |
-      #     echo "Creating/updating RDS secret..."
-      #     kubectl delete secret rds-secret -n ${{ env.K8S_NAMESPACE }} --ignore-not-found
-      #
-      #     kubectl create secret generic rds-secret \
-      #       --namespace ${{ env.K8S_NAMESPACE }} \
-      #       --from-literal=host="${{ secrets.RDS_HOST }}" \
-      #       --from-literal=port="${{ secrets.RDS_PORT }}" \
-      #       --from-literal=username="${{ secrets.RDS_USERNAME }}" \
-      #       --from-literal=password="${{ secrets.RDS_PASSWORD }}" \
-      #       --from-literal=dbname="${{ secrets.RDS_DBNAME }}"
-      #
-      #     echo "RDS secret created."
+            --region $AWS_REGION
 
       - name: Deploy Banking App via Helm
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          ECR_REGISTRY="$ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+          ECR_REGISTRY="$ACCOUNT_ID.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-          helm upgrade --install banking-app ./helm \
-            --namespace ${{ env.K8S_NAMESPACE }} \
+          echo "========================================"
+          echo "Deploying Helm Release: $RELEASE_NAME"
+          echo "Namespace             : $K8S_NAMESPACE"
+          echo "========================================"
+
+          helm upgrade --install $RELEASE_NAME ./helm \
+            --namespace $K8S_NAMESPACE \
             --create-namespace \
             --wait \
             --timeout 10m \
@@ -161,7 +139,30 @@ jobs:
             --set image.frontend.tag=$FRONTEND_IMAGE \
             --set ingress.enabled=false
 
+      # --------------------------------------------------
+      # VERIFY ROLLOUT (ROBUST + PRINTS)
+      # --------------------------------------------------
       - name: Verify Rollout
         run: |
-          kubectl rollout status deployment/${{ env.RELEASE_NAME }}-${{ env.RELEASE_NAME }}-backend -n ${{ env.K8S_NAMESPACE }}
-          kubectl rollout status deployment/${{ env.RELEASE_NAME }}-${{ env.RELEASE_NAME }}-frontend -n ${{ env.K8S_NAMESPACE }}
+          echo "========================================"
+          echo "Helm Release : $RELEASE_NAME"
+          echo "Namespace    : $K8S_NAMESPACE"
+          echo "========================================"
+
+          BACKEND_DEPLOYMENT="${RELEASE_NAME}-${RELEASE_NAME}-backend"
+          FRONTEND_DEPLOYMENT="${RELEASE_NAME}-${RELEASE_NAME}-frontend"
+
+          echo "Checking Backend Deployment: $BACKEND_DEPLOYMENT"
+          kubectl rollout status deployment/$BACKEND_DEPLOYMENT -n $K8S_NAMESPACE
+
+          echo "Checking Frontend Deployment: $FRONTEND_DEPLOYMENT"
+          kubectl rollout status deployment/$FRONTEND_DEPLOYMENT -n $K8S_NAMESPACE
+
+          echo "----------------------------------------"
+          echo "Active Deployments:"
+          kubectl get deployments -n $K8S_NAMESPACE \
+            -l app.kubernetes.io/instance=$RELEASE_NAME
+
+          echo "----------------------------------------"
+          echo "Helm Release Info:"
+          helm list -n $K8S_NAMESPACE | grep $RELEASE_NAME
