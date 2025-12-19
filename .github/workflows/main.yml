@@ -144,27 +144,27 @@ jobs:
 ##############################################################
 # 5) SUCCESS NOTIFICATION (GitHub Native – NO TOKEN REQUIRED)
 ##############################################################
-    success-notification:
-      runs-on: ubuntu-latest
-      needs:
-        - deploy-eks
-        - verify-db-migration
-      if: success()
+  success-notification:
+    runs-on: ubuntu-latest
+    needs:
+      - deploy-eks
+      - verify-db-migration
+    if: success()
 
-      steps:
-        - name: Write Deployment Summary
-          run: |
-            {
-              echo "## ✅ Deployment Successful"
-              echo ""
-              echo "**Release Name:** ${RELEASE_NAME}"
-              echo "**Namespace:** ${K8S_NAMESPACE}"
-              echo ""
-              echo "### ✔ Pipeline Status"
-              echo "- Build & Test: ✅"
-              echo "- Docker Images Push: ✅"
-              echo "- Helm Deployment: ✅"
-              echo "- DB Migration: ✅"
-              echo ""
-              echo "🎉 Banking App deployed successfully to EKS."
-            } >> $GITHUB_STEP_SUMMARY
+    steps:
+      - name: Write Deployment Summary
+        run: |
+          {
+            echo "## ✅ Deployment Successful"
+            echo ""
+            echo "**Release Name:** ${RELEASE_NAME}"
+            echo "**Namespace:** ${K8S_NAMESPACE}"
+            echo ""
+            echo "### ✔ Pipeline Status"
+            echo "- Build & Test: ✅"
+            echo "- Docker Images Push: ✅"
+            echo "- Helm Deployment: ✅"
+            echo "- DB Migration: ✅"
+            echo ""
+            echo "🎉 Banking App deployed successfully to EKS."
+          } >> $GITHUB_STEP_SUMMARY
