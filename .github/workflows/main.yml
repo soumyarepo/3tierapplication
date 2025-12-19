@@ -149,10 +149,13 @@ jobs:
     needs: [deploy-eks, verify-db-migration]
     if: success()
     steps:
-      - name: Notify Success via GitHub
+      - name: Post success notification to GitHub
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const release = process.env.RELEASE_NAME;
+            const namespace = process.env.K8S_NAMESPACE;
             const message = `
             ✅ Deployment SUCCESSFUL
 
@@ -165,9 +168,19 @@ jobs:
             ✔ DB migration verified
             `;
 
-            github.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: message
-            });
+            // Works for both push & PR
+            if (context.payload.pull_request) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: message
+              });
+            } else {
+              await github.rest.repos.createCommitComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: context.sha,
+                body: message
+              });
+            }
