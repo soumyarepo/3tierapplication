@@ -142,45 +142,29 @@ jobs:
           kubectl logs $POD -n $K8S_NAMESPACE
 
 ##############################################################
-# 5) SUCCESS NOTIFICATION (GitHub Native)
+# 5) SUCCESS NOTIFICATION (GitHub Native – NO TOKEN REQUIRED)
 ##############################################################
-  email-notification:
-    runs-on: ubuntu-latest
-    needs: [deploy-eks, verify-db-migration]
-    if: success()
-    steps:
-      - name: Post success notification to GitHub
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const release = process.env.RELEASE_NAME;
-            const namespace = process.env.K8S_NAMESPACE;
-            const message = `
-            ✅ Deployment SUCCESSFUL
+    success-notification:
+      runs-on: ubuntu-latest
+      needs:
+        - deploy-eks
+        - verify-db-migration
+      if: success()
 
-            Release   : ${process.env.RELEASE_NAME}
-            Namespace : ${process.env.K8S_NAMESPACE}
-
-            ✔ Build completed
-            ✔ Images pushed to ECR
-            ✔ Helm deployed
-            ✔ DB migration verified
-            `;
-
-            // Works for both push & PR
-            if (context.payload.pull_request) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                body: message
-              });
-            } else {
-              await github.rest.repos.createCommitComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                commit_sha: context.sha,
-                body: message
-              });
-            }
+      steps:
+        - name: Write Deployment Summary
+          run: |
+            {
+              echo "## ✅ Deployment Successful"
+              echo ""
+              echo "**Release Name:** ${RELEASE_NAME}"
+              echo "**Namespace:** ${K8S_NAMESPACE}"
+              echo ""
+              echo "### ✔ Pipeline Status"
+              echo "- Build & Test: ✅"
+              echo "- Docker Images Push: ✅"
+              echo "- Helm Deployment: ✅"
+              echo "- DB Migration: ✅"
+              echo ""
+              echo "🎉 Banking App deployed successfully to EKS."
+            } >> $GITHUB_STEP_SUMMARY
