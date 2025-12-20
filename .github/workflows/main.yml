@@ -59,7 +59,7 @@ jobs:
           echo "Frontend build successful"
 
 ##############################################################
-# 2) UNIT TEST STAGE (JEST with coverage)
+# 2) UNIT TEST STAGE (JEST with coverage + threshold)
 ##############################################################
   unit-test:
     name: Unit Test (Jest)
@@ -82,22 +82,31 @@ jobs:
           npm install
           echo "Dependencies installed"
 
-      - name: Run Jest Tests with Coverage
+      - name: Run Jest Tests with Coverage and Threshold
         working-directory: backend
         run: |
           echo "===================================="
-          echo "Running Jest unit tests with coverage..."
-          # Run Jest, generate text summary and JSON report
-          npx jest --runInBand --coverage --coverageReporters=text-summary --coverageReporters=json
+          echo "Running Jest unit tests with coverage and enforcing thresholds..."
+          npx jest --runInBand --coverage \
+            --coverageReporters=text-summary \
+            --coverageReporters=json \
+            --coverageReporters=lcov \
+            --coverageThreshold='{"global": {"branches": 50, "functions": 50, "lines": 50, "statements": 50}}'
           echo "Jest tests passed successfully"
-          echo "Coverage JSON report generated at ./backend/coverage/coverage-summary.json"
+          echo "Coverage reports generated in ./coverage"
           echo "===================================="
 
-      - name: Upload Coverage JSON as artifact
+      - name: Upload Coverage JSON
         uses: actions/upload-artifact@v4
         with:
           name: jest-coverage-json
           path: backend/coverage/coverage-summary.json
+
+      - name: Upload Full Coverage Folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: jest-coverage-full
+          path: backend/coverage/
 
 ##############################################################
 # 3) DOCKER BUILD STAGE
