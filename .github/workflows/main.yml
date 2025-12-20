@@ -137,7 +137,7 @@ jobs:
         run: |
           echo "Running SonarQube analysis..."
           sonar-scanner \
-            -Dsonar.projectKey=banking-app \
+            -Dsonar.projectKey=soumyarepo \
             -Dsonar.organization=$SONAR_ORG \
             -Dsonar.sources=. \
             -Dsonar.host.url=$SONAR_HOST_URL \
