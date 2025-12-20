@@ -2,175 +2,157 @@ name: CI/CD Pipeline - 3 Tier Banking App
 
 on:
   push:
-    branches: [email-notification]
+    branches: [testing-job]
   pull_request:
-    branches: [email-notification]
-
-permissions:
-  contents: write
+    branches: [testing-job]
 
 env:
   AWS_REGION: ap-south-1
   ECR_REPO: 3tierbanking-app
   BACKEND_IMAGE: backend
   FRONTEND_IMAGE: frontend
-  K8S_NAMESPACE: default
   RELEASE_NAME: banking-app
 
+##############################################################
+# 1) BUILD & TEST STAGE
+##############################################################
 jobs:
-##############################################################
-# 1) BUILD & TEST
-##############################################################
   build-test:
+    name: Build & Test
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Print Branch Info
+        run: |
+          echo "===================================="
+          echo "Running on branch: $GITHUB_REF"
+          echo "Commit SHA: $GITHUB_SHA"
+          echo "===================================="
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 18
 
       - name: Install Backend Dependencies
         working-directory: backend
-        run: npm install
+        run: |
+          echo "Installing backend dependencies..."
+          npm install
+          echo "Backend dependencies installed successfully"
 
       - name: Install Frontend Dependencies
         working-directory: frontend
-        run: npm install
+        run: |
+          echo "Installing frontend dependencies..."
+          npm install
+          echo "Frontend dependencies installed successfully"
 
       - name: Build Frontend
         working-directory: frontend
-        run: npm run build
+        run: |
+          echo "Building frontend application..."
+          npm run build
+          echo "Frontend build completed"
 
 ##############################################################
-# 2) DOCKER BUILD & PUSH
+# 2) DOCKER BUILD STAGE
 ##############################################################
-  docker-build-push:
+  docker-build:
+    name: Docker Build
     runs-on: ubuntu-latest
     needs: build-test
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: aws-actions/configure-aws-credentials@v4
+    outputs:
+      ecr_registry: ${{ steps.ecr.outputs.registry }}
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Verify AWS Identity
+        run: |
+          echo "Verifying AWS identity..."
+          aws sts get-caller-identity
 
-      - name: Build & Push Images
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set ECR Registry
+        id: ecr
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          ECR="$ACCOUNT_ID.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          REGISTRY="$ACCOUNT_ID.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          echo "ECR Registry: $REGISTRY"
+          echo "registry=$REGISTRY" >> $GITHUB_OUTPUT
 
-          docker build -t $ECR_REPO:$BACKEND_IMAGE ./backend
-          docker tag $ECR_REPO:$BACKEND_IMAGE $ECR/$ECR_REPO:$BACKEND_IMAGE
-          docker push $ECR/$ECR_REPO:$BACKEND_IMAGE
+      - name: Build Backend Docker Image
+        run: |
+          echo "===================================="
+          echo "Building Backend Docker image..."
+          docker build -t backend:latest ./backend
+          docker images | grep backend
+          echo "Backend Docker image build completed"
+          echo "===================================="
 
-          docker build -t $ECR_REPO:$FRONTEND_IMAGE ./frontend
-          docker tag $ECR_REPO:$FRONTEND_IMAGE $ECR/$ECR_REPO:$FRONTEND_IMAGE
-          docker push $ECR/$ECR_REPO:$FRONTEND_IMAGE
+      - name: Build Frontend Docker Image
+        run: |
+          echo "===================================="
+          echo "Building Frontend Docker image..."
+          docker build -t frontend:latest ./frontend
+          docker images | grep frontend
+          echo "Frontend Docker image build completed"
+          echo "===================================="
 
 ##############################################################
-# 3) DEPLOY TO EKS
+# 3) DOCKER PUSH STAGE
 ##############################################################
-  deploy-eks:
+  docker-push:
+    name: Docker Push
     runs-on: ubuntu-latest
-    needs: docker-build-push
-    steps:
-      - uses: actions/checkout@v4
+    needs: docker-build
 
-      - uses: aws-actions/configure-aws-credentials@v4
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Update kubeconfig
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Tag & Push Backend Image
         run: |
-          aws eks update-kubeconfig \
-            --name ${{ secrets.EKS_CLUSTER_NAME }} \
-            --region $AWS_REGION
+          echo "===================================="
+          ECR=${{ needs.docker-build.outputs.ecr_registry }}
+          echo "ECR Registry: $ECR"
+          echo "Tagging backend image..."
+          docker tag backend:latest $ECR/${{ env.ECR_REPO }}:${{ env.BACKEND_IMAGE }}
+          echo "Pushing backend image to ECR..."
+          docker push $ECR/${{ env.ECR_REPO }}:${{ env.BACKEND_IMAGE }}
+          echo "Backend image pushed successfully"
+          echo "===================================="
 
-      - name: Deploy via Helm
+      - name: Tag & Push Frontend Image
         run: |
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          ECR="$ACCOUNT_ID.dkr.ecr.${AWS_REGION}.amazonaws.com"
-
-          helm upgrade --install $RELEASE_NAME ./helm \
-            --namespace $K8S_NAMESPACE \
-            --create-namespace \
-            --wait \
-            --timeout 10m \
-            --atomic \
-            --set db.secretName=rds-secret \
-            --set image.backend.repository=$ECR/$ECR_REPO \
-            --set image.backend.tag=$BACKEND_IMAGE \
-            --set image.frontend.repository=$ECR/$ECR_REPO \
-            --set image.frontend.tag=$FRONTEND_IMAGE
-
-##############################################################
-# 4) VERIFY DB MIGRATION
-##############################################################
-  verify-db-migration:
-    runs-on: ubuntu-latest
-    needs: deploy-eks
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Update kubeconfig
-        run: |
-          aws eks update-kubeconfig \
-            --name ${{ secrets.EKS_CLUSTER_NAME }} \
-            --region $AWS_REGION
-
-      - name: Verify DB Migration Job
-        run: |
-          DB_JOB="${RELEASE_NAME}-${RELEASE_NAME}-db-migrate"
-
-          kubectl wait \
-            --for=condition=complete \
-            job/$DB_JOB \
-            -n $K8S_NAMESPACE \
-            --timeout=300s
-
-          POD=$(kubectl get pod -n $K8S_NAMESPACE -l job-name=$DB_JOB -o jsonpath='{.items[0].metadata.name}')
-          kubectl logs $POD -n $K8S_NAMESPACE
-
-##############################################################
-# 5) SUCCESS NOTIFICATION (GitHub Native – NO TOKEN REQUIRED)
-##############################################################
-  success-notification:
-    name: Success Notification
-    runs-on: ubuntu-latest
-    needs: [deploy-eks, verify-db-migration]
-    if: success()
-    steps:
-      - name: Notify deployment success on commit
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const message = `
-            ✅ **Deployment SUCCESSFUL**
-            **Release**   : ${process.env.RELEASE_NAME}
-            **Namespace** : ${process.env.K8S_NAMESPACE}
-            ✔ Build & Test completed  
-            ✔ Docker images pushed to ECR  
-            ✔ Helm deployment successful  
-            ✔ DB migration verified  
-
-            🚀 Application is live
-            `;
-            await github.rest.repos.createCommitComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              commit_sha: context.sha,
-              body: message
-            });
+          echo "===================================="
+          ECR=${{ needs.docker-build.outputs.ecr_registry }}
+          echo "ECR Registry: $ECR"
+          echo "Tagging frontend image..."
+          docker tag frontend:latest $ECR/${{ env.ECR_REPO }}:${{ env.FRONTEND_IMAGE }}
+          echo "Pushing frontend image to ECR..."
+          docker push $ECR/${{ env.ECR_REPO }}:${{ env.FRONTEND_IMAGE }}
+          echo "Frontend image pushed successfully"
+          echo "===================================="
