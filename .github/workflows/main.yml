@@ -127,7 +127,7 @@ jobs:
 
       - name: Install Sonar Scanner
         run: |
-          npm install -g sonar-scanner
+          npm install -g sonar-scanner@latest
 
       - name: Run SonarQube Analysis
         env:
