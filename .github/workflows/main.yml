@@ -59,7 +59,7 @@ jobs:
           echo "Frontend build successful"
 
 ##############################################################
-# 2) UNIT TEST STAGE (JEST)
+# 2) UNIT TEST STAGE (JEST with coverage)
 ##############################################################
   unit-test:
     name: Unit Test (Jest)
@@ -82,14 +82,22 @@ jobs:
           npm install
           echo "Dependencies installed"
 
-      - name: Run Jest Tests
+      - name: Run Jest Tests with Coverage
         working-directory: backend
         run: |
           echo "===================================="
-          echo "Running Jest unit tests..."
-          npm test -- --runInBand
+          echo "Running Jest unit tests with coverage..."
+          # Run Jest, generate text summary and JSON report
+          npx jest --runInBand --coverage --coverageReporters=text-summary --coverageReporters=json
           echo "Jest tests passed successfully"
+          echo "Coverage JSON report generated at ./backend/coverage/coverage-summary.json"
           echo "===================================="
+
+      - name: Upload Coverage JSON as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: jest-coverage-json
+          path: backend/coverage/coverage-summary.json
 
 ##############################################################
 # 3) DOCKER BUILD STAGE
