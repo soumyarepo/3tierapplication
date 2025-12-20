@@ -14,11 +14,11 @@ env:
   RELEASE_NAME: banking-app
 
 ##############################################################
-# 1) BUILD & TEST STAGE
+# 1) BUILD STAGE
 ##############################################################
 jobs:
-  build-test:
-    name: Build & Test
+  build:
+    name: Build
     runs-on: ubuntu-latest
 
     steps:
@@ -28,8 +28,8 @@ jobs:
       - name: Print Branch Info
         run: |
           echo "===================================="
-          echo "Running on branch: $GITHUB_REF"
-          echo "Commit SHA: $GITHUB_SHA"
+          echo "Branch: $GITHUB_REF"
+          echo "Commit: $GITHUB_SHA"
           echo "===================================="
 
       - name: Setup Node.js
@@ -42,29 +42,62 @@ jobs:
         run: |
           echo "Installing backend dependencies..."
           npm install
-          echo "Backend dependencies installed successfully"
+          echo "Backend dependencies installed"
 
       - name: Install Frontend Dependencies
         working-directory: frontend
         run: |
           echo "Installing frontend dependencies..."
           npm install
-          echo "Frontend dependencies installed successfully"
+          echo "Frontend dependencies installed"
 
       - name: Build Frontend
         working-directory: frontend
         run: |
-          echo "Building frontend application..."
+          echo "Building frontend..."
           npm run build
-          echo "Frontend build completed"
+          echo "Frontend build successful"
 
 ##############################################################
-# 2) DOCKER BUILD STAGE
+# 2) UNIT TEST STAGE (JEST)
+##############################################################
+  unit-test:
+    name: Unit Test (Jest)
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install Backend Dependencies
+        working-directory: backend
+        run: |
+          echo "Installing backend dependencies for tests..."
+          npm install
+          echo "Dependencies installed"
+
+      - name: Run Jest Tests
+        working-directory: backend
+        run: |
+          echo "===================================="
+          echo "Running Jest unit tests..."
+          npm test -- --runInBand
+          echo "Jest tests passed successfully"
+          echo "===================================="
+
+##############################################################
+# 3) DOCKER BUILD STAGE
 ##############################################################
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: build-test
+    needs: unit-test
 
     outputs:
       ecr_registry: ${{ steps.ecr.outputs.registry }}
@@ -98,24 +131,18 @@ jobs:
 
       - name: Build Backend Docker Image
         run: |
-          echo "===================================="
-          echo "Building Backend Docker image..."
+          echo "Building backend Docker image..."
           docker build -t backend:latest ./backend
           docker images | grep backend
-          echo "Backend Docker image build completed"
-          echo "===================================="
 
       - name: Build Frontend Docker Image
         run: |
-          echo "===================================="
-          echo "Building Frontend Docker image..."
+          echo "Building frontend Docker image..."
           docker build -t frontend:latest ./frontend
           docker images | grep frontend
-          echo "Frontend Docker image build completed"
-          echo "===================================="
 
 ##############################################################
-# 3) DOCKER PUSH STAGE
+# 4) DOCKER PUSH STAGE
 ##############################################################
   docker-push:
     name: Docker Push
@@ -133,26 +160,16 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Tag & Push Backend Image
+      - name: Push Backend Image
         run: |
-          echo "===================================="
           ECR=${{ needs.docker-build.outputs.ecr_registry }}
-          echo "ECR Registry: $ECR"
-          echo "Tagging backend image..."
+          echo "Pushing backend image..."
           docker tag backend:latest $ECR/${{ env.ECR_REPO }}:${{ env.BACKEND_IMAGE }}
-          echo "Pushing backend image to ECR..."
           docker push $ECR/${{ env.ECR_REPO }}:${{ env.BACKEND_IMAGE }}
-          echo "Backend image pushed successfully"
-          echo "===================================="
 
-      - name: Tag & Push Frontend Image
+      - name: Push Frontend Image
         run: |
-          echo "===================================="
           ECR=${{ needs.docker-build.outputs.ecr_registry }}
-          echo "ECR Registry: $ECR"
-          echo "Tagging frontend image..."
+          echo "Pushing frontend image..."
           docker tag frontend:latest $ECR/${{ env.ECR_REPO }}:${{ env.FRONTEND_IMAGE }}
-          echo "Pushing frontend image to ECR..."
           docker push $ECR/${{ env.ECR_REPO }}:${{ env.FRONTEND_IMAGE }}
-          echo "Frontend image pushed successfully"
-          echo "===================================="
