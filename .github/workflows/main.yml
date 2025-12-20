@@ -133,10 +133,12 @@ jobs:
         env:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_ORG: ${{ secrets.SONAR_ORGANIZATION }}
         run: |
           echo "Running SonarQube analysis..."
           sonar-scanner \
             -Dsonar.projectKey=banking-app \
+            -Dsonar.organization=$SONAR_ORG \
             -Dsonar.sources=. \
             -Dsonar.host.url=$SONAR_HOST_URL \
             -Dsonar.login=$SONAR_TOKEN \
