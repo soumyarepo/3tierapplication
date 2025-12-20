@@ -131,19 +131,18 @@ jobs:
 
       - name: Run SonarQube Analysis
         env:
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_ORG: ${{ secrets.SONAR_ORGANIZATION }}
         run: |
           echo "Running SonarQube analysis..."
           sonar-scanner \
             -Dsonar.projectKey=soumyarepo \
-            -Dsonar.organization=$SONAR_ORG \
+            -Dsonar.organization=soumyarepo \
             -Dsonar.sources=. \
-            -Dsonar.host.url=$SONAR_HOST_URL \
+            -Dsonar.host.url=https://sonarcloud.io \
             -Dsonar.login=$SONAR_TOKEN \
             -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov-report/lcov.info \
-            -Dsonar.coverage.exclusions=**/node_modules/**,**/__tests__/**
+            -Dsonar.coverage.exclusions=**/node_modules/**,**/__tests__/** \
+            -Dsonar.branch.name=testing-job
 
 ##############################################################
 # 4) DOCKER BUILD STAGE
