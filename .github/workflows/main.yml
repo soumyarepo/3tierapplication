@@ -142,7 +142,7 @@ jobs:
             -Dsonar.login=$SONAR_TOKEN \
             -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov-report/lcov.info \
             -Dsonar.coverage.exclusions=**/node_modules/**,**/__tests__/** \
-            -Dsonar.branch.name=testing-job
+            -Dsonar.branch.name=master
 
 ##############################################################
 # 4) DOCKER BUILD STAGE
