@@ -135,7 +135,7 @@ jobs:
         run: |
           echo "Running SonarQube analysis..."
           sonar-scanner \
-            -Dsonar.projectKey=soumyarepo \
+            -Dsonar.projectKey=soumyarepo_3tierapplication \
             -Dsonar.organization=soumyarepo \
             -Dsonar.sources=. \
             -Dsonar.host.url=https://sonarcloud.io \
