@@ -59,7 +59,7 @@ jobs:
           echo "Frontend build successful"
 
 ##############################################################
-# 2) UNIT TEST STAGE (JEST with coverage + threshold)
+# 2) UNIT TEST STAGE (Jest with coverage & thresholds)
 ##############################################################
   unit-test:
     name: Unit Test (Jest)
@@ -75,14 +75,14 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install Backend Dependencies
+      - name: Install Backend Dependencies for Tests
         working-directory: backend
         run: |
           echo "Installing backend dependencies for tests..."
           npm install
           echo "Dependencies installed"
 
-      - name: Run Jest Tests with Coverage and Threshold
+      - name: Run Jest Tests with Coverage & Threshold
         working-directory: backend
         run: |
           echo "===================================="
@@ -92,7 +92,7 @@ jobs:
             --coverageReporters=json \
             --coverageReporters=lcov \
             --coverageThreshold='{"global": {"branches": 40, "functions": 15, "lines": 40, "statements": 40}}'
-          echo "Jest tests passed successfully"
+          echo "Jest tests completed"
           echo "Coverage reports generated in ./coverage"
           echo "===================================="
 
@@ -109,12 +109,47 @@ jobs:
           path: backend/coverage/
 
 ##############################################################
-# 3) DOCKER BUILD STAGE
+# 3) SONARQUBE SCAN STAGE
+##############################################################
+  sonarqube-scan:
+    name: SonarQube Scan
+    runs-on: ubuntu-latest
+    needs: unit-test
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install Sonar Scanner
+        run: |
+          npm install -g sonar-scanner
+
+      - name: Run SonarQube Analysis
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          echo "Running SonarQube analysis..."
+          sonar-scanner \
+            -Dsonar.projectKey=banking-app \
+            -Dsonar.sources=. \
+            -Dsonar.host.url=$SONAR_HOST_URL \
+            -Dsonar.login=$SONAR_TOKEN \
+            -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov-report/lcov.info \
+            -Dsonar.coverage.exclusions=**/node_modules/**,**/__tests__/**
+
+##############################################################
+# 4) DOCKER BUILD STAGE
 ##############################################################
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: unit-test
+    needs: sonarqube-scan
 
     outputs:
       ecr_registry: ${{ steps.ecr.outputs.registry }}
@@ -159,7 +194,7 @@ jobs:
           docker images | grep frontend
 
 ##############################################################
-# 4) DOCKER PUSH STAGE
+# 5) DOCKER PUSH STAGE
 ##############################################################
   docker-push:
     name: Docker Push
