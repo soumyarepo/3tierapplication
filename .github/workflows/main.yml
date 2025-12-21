@@ -202,7 +202,7 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
         with:
-        fetch-depth: 0
+          fetch-depth: 0
 
       - name: Check SonarCloud Quality Gate Status
         uses: SonarSource/sonarqube-quality-gate-action@v1.1.0
