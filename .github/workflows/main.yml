@@ -13,9 +13,6 @@ env:
   FRONTEND_IMAGE: frontend
   RELEASE_NAME: banking-app
 
-##############################################################
-# JOBS
-##############################################################
 jobs:
 
 ##############################################################
@@ -221,7 +218,8 @@ jobs:
           echo "## 🔍 SonarCloud Quality Gate Result" >> $GITHUB_STEP_SUMMARY
           echo "| Metric | Status | Threshold |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|--------|----------|" >> $GITHUB_STEP_SUMMARY
-          echo "$RESPONSE" | jq -r '.projectStatus.conditions[] | "| \(.metric) | \(.status) | \(.errorThreshold // "-") |"' >> $GITHUB_STEP_SUMMARY
+          echo "$RESPONSE" | jq -r '.projectStatus.conditions[] 
+            | "| \(.metric // "GLOBAL") | \(.status) | \(.errorThreshold // "-") |"' >> $GITHUB_STEP_SUMMARY
 
           # ❌ FUTURE USE: Fail pipeline if Quality Gate is not OK
           # if [ "$STATUS" != "OK" ]; then
