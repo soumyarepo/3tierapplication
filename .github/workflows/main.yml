@@ -143,6 +143,64 @@ jobs:
             -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov-report/lcov.info \
             -Dsonar.coverage.exclusions=**/node_modules/**,**/__tests__/** \
             -Dsonar.branch.name=master
+          echo "SonarQube analysis completed"
+      - name: Fetch SonarQube Metrics (Bugs & Vulnerabilities)
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          echo "===================================="
+          echo "Fetching SonarQube metrics..."
+          echo "===================================="
+
+          curl -s -u $SONAR_TOKEN: \
+            "https://sonarcloud.io/api/measures/component?component=soumyarepo_3tierapplication&metricKeys=bugs,vulnerabilities,code_smells,security_hotspots,coverage,duplicated_lines_density" \
+            > sonar-metrics.json
+
+          echo "Raw Sonar metrics JSON:"
+          cat sonar-metrics.json
+
+      - name: Display Human Readable Sonar Report
+        run: |
+          BUGS=$(jq -r '.component.measures[] | select(.metric=="bugs") | .value' sonar-metrics.json)
+          VULNS=$(jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value' sonar-metrics.json)
+          SMELLS=$(jq -r '.component.measures[] | select(.metric=="code_smells") | .value' sonar-metrics.json)
+          HOTSPOTS=$(jq -r '.component.measures[] | select(.metric=="security_hotspots") | .value' sonar-metrics.json)
+          COVERAGE=$(jq -r '.component.measures[] | select(.metric=="coverage") | .value')
+          DUPLICATION=$(jq -r '.component.measures[] | select(.metric=="duplicated_lines_density") | .value')
+
+          echo "===================================="
+          echo " SonarQube Analysis Report"
+          echo "===================================="
+          printf "%-25s %s\n" "Bugs:" "${BUGS:-0}"
+          printf "%-25s %s\n" "Vulnerabilities:" "${VULNS:-0}"
+          printf "%-25s %s\n" "Code Smells:" "${SMELLS:-0}"
+          printf "%-25s %s\n" "Security Hotspots:" "${HOTSPOTS:-0}"
+          printf "%-25s %s%%\n" "Coverage:" "${COVERAGE:-0}"
+          printf "%-25s %s%%\n" "Duplications:" "${DUPLICATION:-0}"
+          echo "===================================="
+
+      - name: Publish Sonar Report to GitHub Summary
+        run: |
+          BUGS=$(jq -r '.component.measures[] | select(.metric=="bugs") | .value' sonar-metrics.json)
+          VULNS=$(jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value' sonar-metrics.json)
+          SMELLS=$(jq -r '.component.measures[] | select(.metric=="code_smells") | .value' sonar-metrics.json)
+          HOTSPOTS=$(jq -r '.component.measures[] | select(.metric=="security_hotspots") | .value' sonar-metrics.json)
+          COVERAGE=$(jq -r '.component.measures[] | select(.metric=="coverage") | .value')
+          DUPLICATION=$(jq -r '.component.measures[] | select(.metric=="duplicated_lines_density") | .value')
+
+          cat <<EOF >> $GITHUB_STEP_SUMMARY
+          ## 🔍 SonarQube Code Quality Report
+
+          | Metric | Count |
+          |-------|-------|
+          | 🐞 Bugs | ${BUGS:-0} |
+          | 🔐 Vulnerabilities | ${VULNS:-0} |
+          | 🧹 Code Smells | ${SMELLS:-0} |
+          | 🔥 Security Hotspots | ${HOTSPOTS:-0} |
+          | 📊 Coverage | ${COVERAGE:-0}% |
+          | 🧬 Duplication | ${DUPLICATION:-0}% |
+
+          EOF
 
 ##############################################################
 # 4) DOCKER BUILD STAGE
