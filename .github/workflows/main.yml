@@ -209,26 +209,38 @@ jobs:
           echo "Checking SonarCloud Quality Gate status..."
           echo "===================================="
 
-          RESPONSE=$(curl -s -u "$SONAR_TOKEN:" \
+          # Fetch Quality Gate JSON
+          QG_JSON=$(curl -s -u "$SONAR_TOKEN:" \
             "https://sonarcloud.io/api/qualitygates/project_status?projectKey=soumyarepo_3tierapplication")
 
-          STATUS=$(echo "$RESPONSE" | jq -r '.projectStatus.status')
+          # Print raw JSON to console
+          echo "$QG_JSON" | jq
+
+          # Extract overall status
+          STATUS=$(echo "$QG_JSON" | jq -r '.projectStatus.status')
           echo "SonarCloud Quality Gate Status: $STATUS"
 
-          echo "## 🔍 SonarCloud Quality Gate Result" >> $GITHUB_STEP_SUMMARY
-          echo "| Metric | Status | Threshold |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|--------|----------|" >> $GITHUB_STEP_SUMMARY
-          echo "$RESPONSE" | jq -r '.projectStatus.conditions[] 
-            | "| \(.metric // "GLOBAL") | \(.status) | \(.errorThreshold // "-") |"' >> $GITHUB_STEP_SUMMARY
+          # Extract metric conditions for summary table
+          echo "## 🔍 SonarCloud Quality Gate Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Status | Threshold | Actual |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|--------|----------|--------|" >> $GITHUB_STEP_SUMMARY
 
-          # ❌ FUTURE USE: Fail pipeline if Quality Gate is not OK
-          # if [ "$STATUS" != "OK" ]; then
-          #   exit 1
-          # fi
+          echo "$QG_JSON" | jq -r '
+            .projectStatus.conditions[] |
+            "| \(.metricKey) | \(.status) | \(.errorThreshold // "-") | \(.actualValue // "-") |"
+          ' >> $GITHUB_STEP_SUMMARY
 
           echo "===================================="
           echo "Quality Gate check completed"
           echo "===================================="
+
+          # ----------------------------------------------------
+          # ❌ FUTURE USE: Fail pipeline if Quality Gate is not OK
+          # ----------------------------------------------------
+          # if [ "$STATUS" != "OK" ]; then
+          #   echo "❌ Build failed due to SonarCloud Quality Gate failure"
+          #   exit 1
+          # fi
 
 ##############################################################
 # 4) DOCKER BUILD STAGE
