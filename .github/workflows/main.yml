@@ -216,23 +216,16 @@ jobs:
             "https://sonarcloud.io/api/qualitygates/project_status?projectKey=soumyarepo_3tierapplication" \
             | jq -r '.projectStatus.status')
 
-          CONDITIONS=$(curl -s -u "$SONAR_TOKEN:" \
-            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=soumyarepo_3tierapplication" \
-            | jq -r '.projectStatus.conditions[] | "\(.metric) - \(.status) (\(.errorThreshold))"')
-
           echo "SonarCloud Quality Gate Status: $STATUS"
-          echo "Detailed Conditions:"
-          echo "$CONDITIONS"
 
           echo "## 🔍 SonarCloud Quality Gate Result" >> $GITHUB_STEP_SUMMARY
           echo "| Metric | Status | Threshold |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|--------|----------|" >> $GITHUB_STEP_SUMMARY
-          for COND in $(echo "$CONDITIONS"); do
-            METRIC=$(echo "$COND" | cut -d'-' -f1 | xargs)
-            ST=$(echo "$COND" | cut -d'-' -f2 | xargs)
-            TH=$(echo "$COND" | rev | cut -d' ' -f1 | rev)
-            echo "| $METRIC | $ST | $TH |" >> $GITHUB_STEP_SUMMARY
-          done
+
+          curl -s -u "$SONAR_TOKEN:" \
+            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=soumyarepo_3tierapplication" \
+            | jq -r '.projectStatus.conditions[] | "| \(.metric) | \(.status) | \(.errorThreshold // "-") |"' \
+            >> $GITHUB_STEP_SUMMARY
 
           # ----------------------------------------------------
           # ❌ FUTURE USE: Fail pipeline if Quality Gate is not OK
