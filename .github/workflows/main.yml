@@ -111,121 +111,169 @@ jobs:
 ##############################################################
 # 3) SONARQUBE SCAN STAGE
 ##############################################################
-  sonarqube-scan:
-    name: SonarQube Scan
-    runs-on: ubuntu-latest
-    needs: unit-test
+  ##############################################################
+# 3) SONARQUBE SCAN STAGE
+##############################################################
+sonarqube-scan:
+  name: SonarQube Scan
+  runs-on: ubuntu-latest
+  needs: unit-test
 
-    steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+  steps:
+    ############################################################
+    # Checkout with full git history (IMPORTANT for Sonar)
+    ############################################################
+    - name: Checkout Source Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
+    ############################################################
+    # Setup Node.js
+    ############################################################
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
+    ############################################################
+    # Install Sonar Scanner
+    ############################################################
+    - name: Install Sonar Scanner
+      run: npm install -g sonar-scanner@latest
 
-      - name: Install Sonar Scanner
-        run: |
-          npm install -g sonar-scanner@latest
+    ############################################################
+    # Run SonarQube Scan
+    ############################################################
+    - name: Run SonarQube Analysis
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: |
+        echo "Running SonarQube analysis..."
+        sonar-scanner \
+          -Dsonar.projectKey=soumyarepo_3tierapplication \
+          -Dsonar.organization=soumyarepo \
+          -Dsonar.sources=. \
+          -Dsonar.host.url=https://sonarcloud.io \
+          -Dsonar.login=$SONAR_TOKEN \
+          -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov-report/lcov.info \
+          -Dsonar.coverage.exclusions=**/node_modules/**,**/__tests__/** \
+          -Dsonar.branch.name=master
+        echo "SonarQube analysis completed"
 
-      - name: Run SonarQube Analysis
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          echo "Running SonarQube analysis..."
-          sonar-scanner \
-            -Dsonar.projectKey=soumyarepo_3tierapplication \
-            -Dsonar.organization=soumyarepo \
-            -Dsonar.sources=. \
-            -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.login=$SONAR_TOKEN \
-            -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov-report/lcov.info \
-            -Dsonar.coverage.exclusions=**/node_modules/**,**/__tests__/** \
-            -Dsonar.branch.name=master
-          echo "SonarQube analysis completed"
-      - name: Fetch SonarQube Metrics (Bugs & Vulnerabilities)
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          echo "===================================="
-          echo "Fetching SonarQube metrics..."
-          echo "===================================="
+    ############################################################
+    # Fetch SonarQube Metrics
+    ############################################################
+    - name: Fetch SonarQube Metrics
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: |
+        echo "Fetching SonarQube metrics..."
 
-          curl -s -u $SONAR_TOKEN: \
-            "https://sonarcloud.io/api/measures/component?component=soumyarepo_3tierapplication&metricKeys=bugs,vulnerabilities,code_smells,security_hotspots,coverage,duplicated_lines_density" \
-            > sonar-metrics.json
+        curl -s -u "$SONAR_TOKEN:" \
+          "https://sonarcloud.io/api/measures/component?component=soumyarepo_3tierapplication&metricKeys=bugs,vulnerabilities,code_smells,security_hotspots,coverage,duplicated_lines_density" \
+          > sonar-metrics.json
 
-          echo "Raw Sonar metrics JSON:"
-          cat sonar-metrics.json
+        echo "Raw Sonar metrics JSON:"
+        cat sonar-metrics.json
 
-      - name: Display Human Readable Sonar Report
-        run: |
-          BUGS=$(jq -r '.component.measures[] | select(.metric=="bugs") | .value' sonar-metrics.json)
-          VULNS=$(jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value' sonar-metrics.json)
-          SMELLS=$(jq -r '.component.measures[] | select(.metric=="code_smells") | .value' sonar-metrics.json)
-          HOTSPOTS=$(jq -r '.component.measures[] | select(.metric=="security_hotspots") | .value' sonar-metrics.json)
-          COVERAGE=$(jq -r '.component.measures[] | select(.metric=="coverage") | .value')
-          DUPLICATION=$(jq -r '.component.measures[] | select(.metric=="duplicated_lines_density") | .value')
+    ############################################################
+    # Human-Readable Console Report
+    ############################################################
+    - name: Display Human Readable Sonar Report
+      run: |
+        BUGS=$(jq -r '.component.measures[] | select(.metric=="bugs") | .value' sonar-metrics.json)
+        VULNS=$(jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value' sonar-metrics.json)
+        SMELLS=$(jq -r '.component.measures[] | select(.metric=="code_smells") | .value' sonar-metrics.json)
+        HOTSPOTS=$(jq -r '.component.measures[] | select(.metric=="security_hotspots") | .value' sonar-metrics.json)
+        COVERAGE=$(jq -r '.component.measures[] | select(.metric=="coverage") | .value')
+        DUPLICATION=$(jq -r '.component.measures[] | select(.metric=="duplicated_lines_density") | .value')
 
-          echo "===================================="
-          echo " SonarQube Analysis Report"
-          echo "===================================="
-          printf "%-25s %s\n" "Bugs:" "${BUGS:-0}"
-          printf "%-25s %s\n" "Vulnerabilities:" "${VULNS:-0}"
-          printf "%-25s %s\n" "Code Smells:" "${SMELLS:-0}"
-          printf "%-25s %s\n" "Security Hotspots:" "${HOTSPOTS:-0}"
-          printf "%-25s %s%%\n" "Coverage:" "${COVERAGE:-0}"
-          printf "%-25s %s%%\n" "Duplications:" "${DUPLICATION:-0}"
-          echo "===================================="
+        echo "===================================="
+        echo " SonarQube Analysis Report"
+        echo "===================================="
+        printf "%-25s %s\n" "Bugs:" "${BUGS:-0}"
+        printf "%-25s %s\n" "Vulnerabilities:" "${VULNS:-0}"
+        printf "%-25s %s\n" "Code Smells:" "${SMELLS:-0}"
+        printf "%-25s %s\n" "Security Hotspots:" "${HOTSPOTS:-0}"
+        printf "%-25s %s%%\n" "Coverage:" "${COVERAGE:-0}"
+        printf "%-25s %s%%\n" "Duplications:" "${DUPLICATION:-0}"
+        echo "===================================="
 
-      - name: Publish Sonar Report to GitHub Summary
-        run: |
-          BUGS=$(jq -r '.component.measures[] | select(.metric=="bugs") | .value' sonar-metrics.json)
-          VULNS=$(jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value' sonar-metrics.json)
-          SMELLS=$(jq -r '.component.measures[] | select(.metric=="code_smells") | .value' sonar-metrics.json)
-          HOTSPOTS=$(jq -r '.component.measures[] | select(.metric=="security_hotspots") | .value' sonar-metrics.json)
-          COVERAGE=$(jq -r '.component.measures[] | select(.metric=="coverage") | .value')
-          DUPLICATION=$(jq -r '.component.measures[] | select(.metric=="duplicated_lines_density") | .value')
+    ############################################################
+    # Publish Metrics to GitHub Summary
+    ############################################################
+    - name: Publish Sonar Metrics to GitHub Summary
+      run: |
+        BUGS=$(jq -r '.component.measures[] | select(.metric=="bugs") | .value' sonar-metrics.json)
+        VULNS=$(jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value' sonar-metrics.json)
+        SMELLS=$(jq -r '.component.measures[] | select(.metric=="code_smells") | .value' sonar-metrics.json)
+        HOTSPOTS=$(jq -r '.component.measures[] | select(.metric=="security_hotspots") | .value' sonar-metrics.json)
+        COVERAGE=$(jq -r '.component.measures[] | select(.metric=="coverage") | .value')
+        DUPLICATION=$(jq -r '.component.measures[] | select(.metric=="duplicated_lines_density") | .value')
 
-          cat <<EOF >> $GITHUB_STEP_SUMMARY
-          ## 🔍 SonarQube Code Quality Report
+        cat <<EOF >> \$GITHUB_STEP_SUMMARY
+        ## 🔍 SonarQube Code Quality Report
 
-          | Metric | Count |
-          |-------|-------|
-          | 🐞 Bugs | ${BUGS:-0} |
-          | 🔐 Vulnerabilities | ${VULNS:-0} |
-          | 🧹 Code Smells | ${SMELLS:-0} |
-          | 🔥 Security Hotspots | ${HOTSPOTS:-0} |
-          | 📊 Coverage | ${COVERAGE:-0}% |
-          | 🧬 Duplication | ${DUPLICATION:-0}% |
+        | Metric | Count |
+        |-------|-------|
+        | 🐞 Bugs | ${BUGS:-0} |
+        | 🔐 Vulnerabilities | ${VULNS:-0} |
+        | 🧹 Code Smells | ${SMELLS:-0} |
+        | 🔥 Security Hotspots | ${HOTSPOTS:-0} |
+        | 📊 Coverage | ${COVERAGE:-0}% |
+        | 🧬 Duplication | ${DUPLICATION:-0}% |
+        EOF
 
-          EOF
-      - name: Fetch Sonar Issues (Severity-wise Table)
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          PROJECT_KEY="soumyarepo_3tierapplication"
+    ############################################################
+    # Sonar Issues Summary + Severity-wise Table
+    ############################################################
+    - name: Sonar Issues Summary & Severity-wise Table
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: |
+        PROJECT_KEY="soumyarepo_3tierapplication"
 
-          echo "## 🔍 SonarCloud Issues Report (Severity-wise)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Severity | Type | File | Line | Message |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|------|------|------|---------|" >> $GITHUB_STEP_SUMMARY
+        curl -s -u "$SONAR_TOKEN:" \
+          "https://sonarcloud.io/api/issues/search?componentKeys=$PROJECT_KEY&resolved=false&ps=500" \
+          -o sonar-issues.json
 
-          curl -s -u "$SONAR_TOKEN:" \
-            "https://sonarcloud.io/api/issues/search?componentKeys=$PROJECT_KEY&resolved=false&ps=500" \
-            -o sonar-issues.json
+        BLOCKER=$(jq '[.issues[] | select(.severity=="BLOCKER")] | length' sonar-issues.json)
+        CRITICAL=$(jq '[.issues[] | select(.severity=="CRITICAL")] | length' sonar-issues.json)
+        MAJOR=$(jq '[.issues[] | select(.severity=="MAJOR")] | length' sonar-issues.json)
+        MINOR=$(jq '[.issues[] | select(.severity=="MINOR")] | length' sonar-issues.json)
+        INFO=$(jq '[.issues[] | select(.severity=="INFO")] | length' sonar-issues.json)
 
-          for SEV in BLOCKER CRITICAL MAJOR MINOR INFO; do
-            jq -r --arg sev "$SEV" '
-              .issues[]
-              | select(.severity==$sev)
-              | "| \(.severity) | \(.type) | \(.component | split(":")[1]) | \(.line // "-") | \(.message | gsub("\n"; " ") | gsub("\\|"; "/")) |"
-            ' sonar-issues.json >> $GITHUB_STEP_SUMMARY
-          done
+        echo "## 🔍 SonarCloud Issues Summary" >> \$GITHUB_STEP_SUMMARY
+        echo "| Severity | Count |" >> \$GITHUB_STEP_SUMMARY
+        echo "|----------|-------|" >> \$GITHUB_STEP_SUMMARY
+        echo "| 🚨 BLOCKER | $BLOCKER |" >> \$GITHUB_STEP_SUMMARY
+        echo "| 🔥 CRITICAL | $CRITICAL |" >> \$GITHUB_STEP_SUMMARY
+        echo "| ⚠️ MAJOR | $MAJOR |" >> \$GITHUB_STEP_SUMMARY
+        echo "| 🟡 MINOR | $MINOR |" >> \$GITHUB_STEP_SUMMARY
+        echo "| ℹ️ INFO | $INFO |" >> \$GITHUB_STEP_SUMMARY
+        echo "" >> \$GITHUB_STEP_SUMMARY
+
+        echo "## 📋 Detailed Issues (Severity-wise)" >> \$GITHUB_STEP_SUMMARY
+        echo "| Severity | Type | File | Line | Message |" >> \$GITHUB_STEP_SUMMARY
+        echo "|----------|------|------|------|---------|" >> \$GITHUB_STEP_SUMMARY
+
+        for SEV in BLOCKER CRITICAL MAJOR MINOR INFO; do
+          jq -r --arg sev "$SEV" '
+            .issues[]
+            | select(.severity==$sev)
+            | "| \(.severity) | \(.type) | \(.component | split(":")[1]) | \(.line // "-") | \(.message | gsub("\n"; " ") | gsub("\\|"; "/")) |"
+          ' sonar-issues.json >> \$GITHUB_STEP_SUMMARY
+        done
+
+        # ----------------------------------------------------
+        # ❌ FUTURE USE: Fail pipeline on BLOCKER / CRITICAL
+        # ----------------------------------------------------
+        # if [ "$BLOCKER" -gt 0 ] || [ "$CRITICAL" -gt 0 ]; then
+        #   echo "❌ Build failed due to BLOCKER or CRITICAL Sonar issues"
+        #   exit 1
+        # fi
+
 
 
 ##############################################################
