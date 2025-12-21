@@ -281,24 +281,12 @@ jobs:
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh
-          
+
       - name: Scan Backend Image
-        env:
-          AWS_REGION: ${{ env.AWS_REGION }}
-          ECR_REPO: ${{ env.ECR_REPO }}
-          BACKEND_IMAGE: ${{ env.BACKEND_IMAGE }}
         run: |
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          ECR="$ACCOUNT_ID.dkr.ecr.${AWS_REGION}.amazonaws.com"
-
-          echo "## 🔍 Scanning Backend Image: $ECR/${ECR_REPO}:${BACKEND_IMAGE}" >> $GITHUB_STEP_SUMMARY
-
-          trivy image -f json -o trivy-backend.json $ECR/${ECR_REPO}:${BACKEND_IMAGE}
-
-          echo "| Vulnerability | Severity | Package | Installed Version | Fixed Version |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------------|---------|--------|-----------------|--------------|" >> $GITHUB_STEP_SUMMARY
-
-          jq -r '.Results[].Vulnerabilities[]? | "| \(.VulnerabilityID) | \(.Severity) | \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion // "-") |"' trivy-backend.json >> $GITHUB_STEP_SUMMARY
+          docker tag backend:latest backend:scan
+          trivy image --exit-code 0 --format json --output trivy-backend.json backend:scan
+          cat trivy-backend.json
 
       - name: Scan Frontend Image
         env:
@@ -306,17 +294,9 @@ jobs:
           ECR_REPO: ${{ env.ECR_REPO }}
           FRONTEND_IMAGE: ${{ env.FRONTEND_IMAGE }}
         run: |
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          ECR="$ACCOUNT_ID.dkr.ecr.${AWS_REGION}.amazonaws.com"
-
-          echo "## 🔍 Scanning Frontend Image: $ECR/${ECR_REPO}:${FRONTEND_IMAGE}" >> $GITHUB_STEP_SUMMARY
-
-          trivy image -f json -o trivy-frontend.json $ECR/${ECR_REPO}:${FRONTEND_IMAGE}
-
-          echo "| Vulnerability | Severity | Package | Installed Version | Fixed Version |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------------|---------|--------|-----------------|--------------|" >> $GITHUB_STEP_SUMMARY
-
-          jq -r '.Results[].Vulnerabilities[]? | "| \(.VulnerabilityID) | \(.Severity) | \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion // "-") |"' trivy-frontend.json >> $GITHUB_STEP_SUMMARY
+          docker tag frontend:latest frontend:scan
+          trivy image --exit-code 0 --format json --output trivy-frontend.json frontend:scan
+          cat trivy-frontend.json
 
 
 ##############################################################
