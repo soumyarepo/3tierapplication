@@ -204,6 +204,29 @@ jobs:
           | 🧬 Duplication | ${DUPLICATION:-0}% |
 
           EOF
+      - name: Fetch Sonar Issues (Severity-wise Table)
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          PROJECT_KEY="soumyarepo_3tierapplication"
+
+          echo "## 🔍 SonarCloud Issues Report (Severity-wise)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Severity | Type | File | Line | Message |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|------|------|------|---------|" >> $GITHUB_STEP_SUMMARY
+
+          curl -s -u "$SONAR_TOKEN:" \
+            "https://sonarcloud.io/api/issues/search?componentKeys=$PROJECT_KEY&resolved=false&ps=500" \
+            -o sonar-issues.json
+
+          for SEV in BLOCKER CRITICAL MAJOR MINOR INFO; do
+            jq -r --arg sev "$SEV" '
+              .issues[]
+              | select(.severity==$sev)
+              | "| \(.severity) | \(.type) | \(.component | split(":")[1]) | \(.line // "-") | \(.message | gsub("\n"; " ") | gsub("\\|"; "/")) |"
+            ' sonar-issues.json >> $GITHUB_STEP_SUMMARY
+          done
+
 
 ##############################################################
 # 4) DOCKER BUILD STAGE
