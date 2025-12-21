@@ -14,9 +14,13 @@ env:
   RELEASE_NAME: banking-app
 
 ##############################################################
-# 1) BUILD STAGE
+# JOBS
 ##############################################################
 jobs:
+
+##############################################################
+# 1) BUILD STAGE
+##############################################################
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -27,10 +31,8 @@ jobs:
 
       - name: Print Branch Info
         run: |
-          echo "===================================="
           echo "Branch: $GITHUB_REF"
           echo "Commit: $GITHUB_SHA"
-          echo "===================================="
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -39,27 +41,18 @@ jobs:
 
       - name: Install Backend Dependencies
         working-directory: backend
-        run: |
-          echo "Installing backend dependencies..."
-          npm install
-          echo "Backend dependencies installed"
+        run: npm install
 
       - name: Install Frontend Dependencies
         working-directory: frontend
-        run: |
-          echo "Installing frontend dependencies..."
-          npm install
-          echo "Frontend dependencies installed"
+        run: npm install
 
       - name: Build Frontend
         working-directory: frontend
-        run: |
-          echo "Building frontend..."
-          npm run build
-          echo "Frontend build successful"
+        run: npm run build
 
 ##############################################################
-# 2) UNIT TEST STAGE (Jest with coverage & thresholds)
+# 2) UNIT TEST STAGE
 ##############################################################
   unit-test:
     name: Unit Test (Jest)
@@ -67,214 +60,135 @@ jobs:
     needs: build
 
     steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      - name: Install Backend Dependencies for Tests
+      - name: Install Backend Dependencies
         working-directory: backend
-        run: |
-          echo "Installing backend dependencies for tests..."
-          npm install
-          echo "Dependencies installed"
+        run: npm install
 
-      - name: Run Jest Tests with Coverage & Threshold
+      - name: Run Jest with Coverage
         working-directory: backend
         run: |
-          echo "===================================="
-          echo "Running Jest unit tests with coverage and enforcing thresholds..."
           npx jest --runInBand --coverage \
             --coverageReporters=text-summary \
             --coverageReporters=json \
             --coverageReporters=lcov \
-            --coverageThreshold='{"global": {"branches": 40, "functions": 15, "lines": 40, "statements": 40}}'
-          echo "Jest tests completed"
-          echo "Coverage reports generated in ./coverage"
-          echo "===================================="
+            --coverageThreshold='{"global":{"branches":40,"functions":15,"lines":40,"statements":40}}'
 
-      - name: Upload Coverage JSON
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: jest-coverage-json
-          path: backend/coverage/coverage-summary.json
-
-      - name: Upload Full Coverage Folder
-        uses: actions/upload-artifact@v4
-        with:
-          name: jest-coverage-full
+          name: jest-coverage
           path: backend/coverage/
 
 ##############################################################
 # 3) SONARQUBE SCAN STAGE
 ##############################################################
-  ##############################################################
-# 3) SONARQUBE SCAN STAGE
-##############################################################
-sonarqube-scan:
-  name: SonarQube Scan
-  runs-on: ubuntu-latest
-  needs: unit-test
+  sonarqube-scan:
+    name: SonarQube Scan
+    runs-on: ubuntu-latest
+    needs: unit-test
 
-  steps:
-    ############################################################
-    # Checkout with full git history (IMPORTANT for Sonar)
-    ############################################################
-    - name: Checkout Source Code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    ############################################################
-    # Setup Node.js
-    ############################################################
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 18
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
 
-    ############################################################
-    # Install Sonar Scanner
-    ############################################################
-    - name: Install Sonar Scanner
-      run: npm install -g sonar-scanner@latest
+      - name: Install Sonar Scanner
+        run: npm install -g sonar-scanner@latest
 
-    ############################################################
-    # Run SonarQube Scan
-    ############################################################
-    - name: Run SonarQube Analysis
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      run: |
-        echo "Running SonarQube analysis..."
-        sonar-scanner \
-          -Dsonar.projectKey=soumyarepo_3tierapplication \
-          -Dsonar.organization=soumyarepo \
-          -Dsonar.sources=. \
-          -Dsonar.host.url=https://sonarcloud.io \
-          -Dsonar.login=$SONAR_TOKEN \
-          -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov-report/lcov.info \
-          -Dsonar.coverage.exclusions=**/node_modules/**,**/__tests__/** \
-          -Dsonar.branch.name=master
-        echo "SonarQube analysis completed"
+      - name: Run SonarQube Analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          sonar-scanner \
+            -Dsonar.projectKey=soumyarepo_3tierapplication \
+            -Dsonar.organization=soumyarepo \
+            -Dsonar.sources=. \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.login=$SONAR_TOKEN \
+            -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov-report/lcov.info \
+            -Dsonar.coverage.exclusions=**/node_modules/**,**/__tests__/** \
+            -Dsonar.branch.name=master
 
-    ############################################################
-    # Fetch SonarQube Metrics
-    ############################################################
-    - name: Fetch SonarQube Metrics
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      run: |
-        echo "Fetching SonarQube metrics..."
+      - name: Fetch Sonar Metrics
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          curl -s -u "$SONAR_TOKEN:" \
+            "https://sonarcloud.io/api/measures/component?component=soumyarepo_3tierapplication&metricKeys=bugs,vulnerabilities,code_smells,security_hotspots,coverage,duplicated_lines_density" \
+            > sonar-metrics.json
 
-        curl -s -u "$SONAR_TOKEN:" \
-          "https://sonarcloud.io/api/measures/component?component=soumyarepo_3tierapplication&metricKeys=bugs,vulnerabilities,code_smells,security_hotspots,coverage,duplicated_lines_density" \
-          > sonar-metrics.json
+      - name: Publish Metrics to Summary
+        run: |
+          BUGS=$(jq -r '.component.measures[]|select(.metric=="bugs")|.value' sonar-metrics.json)
+          VULNS=$(jq -r '.component.measures[]|select(.metric=="vulnerabilities")|.value' sonar-metrics.json)
+          SMELLS=$(jq -r '.component.measures[]|select(.metric=="code_smells")|.value' sonar-metrics.json)
+          HOTSPOTS=$(jq -r '.component.measures[]|select(.metric=="security_hotspots")|.value' sonar-metrics.json)
+          COVERAGE=$(jq -r '.component.measures[]|select(.metric=="coverage")|.value' sonar-metrics.json)
+          DUPLICATION=$(jq -r '.component.measures[]|select(.metric=="duplicated_lines_density")|.value' sonar-metrics.json)
 
-        echo "Raw Sonar metrics JSON:"
-        cat sonar-metrics.json
+          cat <<EOF >> $GITHUB_STEP_SUMMARY
+          ## 🔍 SonarQube Code Quality Report
 
-    ############################################################
-    # Human-Readable Console Report
-    ############################################################
-    - name: Display Human Readable Sonar Report
-      run: |
-        BUGS=$(jq -r '.component.measures[] | select(.metric=="bugs") | .value' sonar-metrics.json)
-        VULNS=$(jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value' sonar-metrics.json)
-        SMELLS=$(jq -r '.component.measures[] | select(.metric=="code_smells") | .value' sonar-metrics.json)
-        HOTSPOTS=$(jq -r '.component.measures[] | select(.metric=="security_hotspots") | .value' sonar-metrics.json)
-        COVERAGE=$(jq -r '.component.measures[] | select(.metric=="coverage") | .value')
-        DUPLICATION=$(jq -r '.component.measures[] | select(.metric=="duplicated_lines_density") | .value')
+          | Metric | Value |
+          |-------|-------|
+          | 🐞 Bugs | ${BUGS:-0} |
+          | 🔐 Vulnerabilities | ${VULNS:-0} |
+          | 🧹 Code Smells | ${SMELLS:-0} |
+          | 🔥 Security Hotspots | ${HOTSPOTS:-0} |
+          | 📊 Coverage | ${COVERAGE:-0}% |
+          | 🧬 Duplication | ${DUPLICATION:-0}% |
+          EOF
 
-        echo "===================================="
-        echo " SonarQube Analysis Report"
-        echo "===================================="
-        printf "%-25s %s\n" "Bugs:" "${BUGS:-0}"
-        printf "%-25s %s\n" "Vulnerabilities:" "${VULNS:-0}"
-        printf "%-25s %s\n" "Code Smells:" "${SMELLS:-0}"
-        printf "%-25s %s\n" "Security Hotspots:" "${HOTSPOTS:-0}"
-        printf "%-25s %s%%\n" "Coverage:" "${COVERAGE:-0}"
-        printf "%-25s %s%%\n" "Duplications:" "${DUPLICATION:-0}"
-        echo "===================================="
+      - name: Sonar Issues Summary & Table
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          PROJECT_KEY="soumyarepo_3tierapplication"
 
-    ############################################################
-    # Publish Metrics to GitHub Summary
-    ############################################################
-    - name: Publish Sonar Metrics to GitHub Summary
-      run: |
-        BUGS=$(jq -r '.component.measures[] | select(.metric=="bugs") | .value' sonar-metrics.json)
-        VULNS=$(jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value' sonar-metrics.json)
-        SMELLS=$(jq -r '.component.measures[] | select(.metric=="code_smells") | .value' sonar-metrics.json)
-        HOTSPOTS=$(jq -r '.component.measures[] | select(.metric=="security_hotspots") | .value' sonar-metrics.json)
-        COVERAGE=$(jq -r '.component.measures[] | select(.metric=="coverage") | .value')
-        DUPLICATION=$(jq -r '.component.measures[] | select(.metric=="duplicated_lines_density") | .value')
+          curl -s -u "$SONAR_TOKEN:" \
+            "https://sonarcloud.io/api/issues/search?componentKeys=$PROJECT_KEY&resolved=false&ps=500" \
+            -o sonar-issues.json
 
-        cat <<EOF >> \$GITHUB_STEP_SUMMARY
-        ## 🔍 SonarQube Code Quality Report
+          BLOCKER=$(jq '[.issues[]|select(.severity=="BLOCKER")]|length' sonar-issues.json)
+          CRITICAL=$(jq '[.issues[]|select(.severity=="CRITICAL")]|length' sonar-issues.json)
+          MAJOR=$(jq '[.issues[]|select(.severity=="MAJOR")]|length' sonar-issues.json)
+          MINOR=$(jq '[.issues[]|select(.severity=="MINOR")]|length' sonar-issues.json)
+          INFO=$(jq '[.issues[]|select(.severity=="INFO")]|length' sonar-issues.json)
 
-        | Metric | Count |
-        |-------|-------|
-        | 🐞 Bugs | ${BUGS:-0} |
-        | 🔐 Vulnerabilities | ${VULNS:-0} |
-        | 🧹 Code Smells | ${SMELLS:-0} |
-        | 🔥 Security Hotspots | ${HOTSPOTS:-0} |
-        | 📊 Coverage | ${COVERAGE:-0}% |
-        | 🧬 Duplication | ${DUPLICATION:-0}% |
-        EOF
+          echo "## 🚦 SonarCloud Issues Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Severity | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🚨 BLOCKER | $BLOCKER |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔥 CRITICAL | $CRITICAL |" >> $GITHUB_STEP_SUMMARY
+          echo "| ⚠️ MAJOR | $MAJOR |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🟡 MINOR | $MINOR |" >> $GITHUB_STEP_SUMMARY
+          echo "| ℹ️ INFO | $INFO |" >> $GITHUB_STEP_SUMMARY
 
-    ############################################################
-    # Sonar Issues Summary + Severity-wise Table
-    ############################################################
-    - name: Sonar Issues Summary & Severity-wise Table
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      run: |
-        PROJECT_KEY="soumyarepo_3tierapplication"
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📋 Detailed Issues" >> $GITHUB_STEP_SUMMARY
+          echo "| Severity | Type | File | Line | Message |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|------|------|------|---------|" >> $GITHUB_STEP_SUMMARY
 
-        curl -s -u "$SONAR_TOKEN:" \
-          "https://sonarcloud.io/api/issues/search?componentKeys=$PROJECT_KEY&resolved=false&ps=500" \
-          -o sonar-issues.json
+          for SEV in BLOCKER CRITICAL MAJOR MINOR INFO; do
+            jq -r --arg sev "$SEV" '
+              .issues[] | select(.severity==$sev)
+              | "| \(.severity) | \(.type) | \(.component|split(":")[1]) | \(.line//"-") | \(.message|gsub("\n";" ")|gsub("\\|";"/")) |"
+            ' sonar-issues.json >> $GITHUB_STEP_SUMMARY
+          done
 
-        BLOCKER=$(jq '[.issues[] | select(.severity=="BLOCKER")] | length' sonar-issues.json)
-        CRITICAL=$(jq '[.issues[] | select(.severity=="CRITICAL")] | length' sonar-issues.json)
-        MAJOR=$(jq '[.issues[] | select(.severity=="MAJOR")] | length' sonar-issues.json)
-        MINOR=$(jq '[.issues[] | select(.severity=="MINOR")] | length' sonar-issues.json)
-        INFO=$(jq '[.issues[] | select(.severity=="INFO")] | length' sonar-issues.json)
-
-        echo "## 🔍 SonarCloud Issues Summary" >> \$GITHUB_STEP_SUMMARY
-        echo "| Severity | Count |" >> \$GITHUB_STEP_SUMMARY
-        echo "|----------|-------|" >> \$GITHUB_STEP_SUMMARY
-        echo "| 🚨 BLOCKER | $BLOCKER |" >> \$GITHUB_STEP_SUMMARY
-        echo "| 🔥 CRITICAL | $CRITICAL |" >> \$GITHUB_STEP_SUMMARY
-        echo "| ⚠️ MAJOR | $MAJOR |" >> \$GITHUB_STEP_SUMMARY
-        echo "| 🟡 MINOR | $MINOR |" >> \$GITHUB_STEP_SUMMARY
-        echo "| ℹ️ INFO | $INFO |" >> \$GITHUB_STEP_SUMMARY
-        echo "" >> \$GITHUB_STEP_SUMMARY
-
-        echo "## 📋 Detailed Issues (Severity-wise)" >> \$GITHUB_STEP_SUMMARY
-        echo "| Severity | Type | File | Line | Message |" >> \$GITHUB_STEP_SUMMARY
-        echo "|----------|------|------|------|---------|" >> \$GITHUB_STEP_SUMMARY
-
-        for SEV in BLOCKER CRITICAL MAJOR MINOR INFO; do
-          jq -r --arg sev "$SEV" '
-            .issues[]
-            | select(.severity==$sev)
-            | "| \(.severity) | \(.type) | \(.component | split(":")[1]) | \(.line // "-") | \(.message | gsub("\n"; " ") | gsub("\\|"; "/")) |"
-          ' sonar-issues.json >> \$GITHUB_STEP_SUMMARY
-        done
-
-        # ----------------------------------------------------
-        # ❌ FUTURE USE: Fail pipeline on BLOCKER / CRITICAL
-        # ----------------------------------------------------
-        # if [ "$BLOCKER" -gt 0 ] || [ "$CRITICAL" -gt 0 ]; then
-        #   echo "❌ Build failed due to BLOCKER or CRITICAL Sonar issues"
-        #   exit 1
-        # fi
-
-
+          # ❌ FUTURE USE: Fail pipeline if BLOCKER / CRITICAL > 0
+          # if [ "$BLOCKER" -gt 0 ] || [ "$CRITICAL" -gt 0 ]; then
+          #   exit 1
+          # fi
 
 ##############################################################
 # 4) DOCKER BUILD STAGE
@@ -284,47 +198,21 @@ sonarqube-scan:
     runs-on: ubuntu-latest
     needs: sonarqube-scan
 
-    outputs:
-      ecr_registry: ${{ steps.ecr.outputs.registry }}
-
     steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Verify AWS Identity
-        run: |
-          echo "Verifying AWS identity..."
-          aws sts get-caller-identity
+      - uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Set ECR Registry
-        id: ecr
+      - name: Build Docker Images
         run: |
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          REGISTRY="$ACCOUNT_ID.dkr.ecr.${AWS_REGION}.amazonaws.com"
-          echo "ECR Registry: $REGISTRY"
-          echo "registry=$REGISTRY" >> $GITHUB_OUTPUT
-
-      - name: Build Backend Docker Image
-        run: |
-          echo "Building backend Docker image..."
           docker build -t backend:latest ./backend
-          docker images | grep backend
-
-      - name: Build Frontend Docker Image
-        run: |
-          echo "Building frontend Docker image..."
           docker build -t frontend:latest ./frontend
-          docker images | grep frontend
 
 ##############################################################
 # 5) DOCKER PUSH STAGE
@@ -335,26 +223,21 @@ sonarqube-scan:
     needs: docker-build
 
     steps:
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
+      - uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Push Backend Image
+      - name: Push Images
         run: |
-          ECR=${{ needs.docker-build.outputs.ecr_registry }}
-          echo "Pushing backend image..."
-          docker tag backend:latest $ECR/${{ env.ECR_REPO }}:${{ env.BACKEND_IMAGE }}
-          docker push $ECR/${{ env.ECR_REPO }}:${{ env.BACKEND_IMAGE }}
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR="$ACCOUNT_ID.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-      - name: Push Frontend Image
-        run: |
-          ECR=${{ needs.docker-build.outputs.ecr_registry }}
-          echo "Pushing frontend image..."
-          docker tag frontend:latest $ECR/${{ env.ECR_REPO }}:${{ env.FRONTEND_IMAGE }}
-          docker push $ECR/${{ env.ECR_REPO }}:${{ env.FRONTEND_IMAGE }}
+          docker tag backend:latest $ECR/${ECR_REPO}:${BACKEND_IMAGE}
+          docker tag frontend:latest $ECR/${ECR_REPO}:${FRONTEND_IMAGE}
+
+          docker push $ECR/${ECR_REPO}:${BACKEND_IMAGE}
+          docker push $ECR/${ECR_REPO}:${FRONTEND_IMAGE}
