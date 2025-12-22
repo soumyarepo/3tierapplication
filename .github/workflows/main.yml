@@ -306,8 +306,6 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: '0'
           format: table
-        run: |
-          trivy image --exit-code 0 --severity HIGH,CRITICAL backend:latest
 
       - name: Trivy Scan - Frontend
         uses: aquasecurity/trivy-action@0.24.0
