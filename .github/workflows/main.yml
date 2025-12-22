@@ -394,8 +394,8 @@ jobs:
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           ECR="$ACCOUNT_ID.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-          docker tag backend:latest $ECR/${ECR_REPO}:${BACKEND_IMAGE}
-          docker tag frontend:latest $ECR/${ECR_REPO}:${FRONTEND_IMAGE}
+          docker tag backend:latest $ECR/${ECR_REPO}:${BACKEND_IMAGE}:latest
+          docker tag frontend:latest $ECR/${ECR_REPO}:${FRONTEND_IMAGE}:latest
 
-          docker push $ECR/${ECR_REPO}:${BACKEND_IMAGE}
-          docker push $ECR/${ECR_REPO}:${FRONTEND_IMAGE}
+          docker push $ECR/${ECR_REPO}:${BACKEND_IMAGE}:latest
+          docker push $ECR/${ECR_REPO}:${FRONTEND_IMAGE}:latest
