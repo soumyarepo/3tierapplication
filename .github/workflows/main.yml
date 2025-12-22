@@ -295,18 +295,27 @@ jobs:
         run: |
           docker load -i backend.tar
           docker load -i frontend.tar
-      - name: Install Trivy
-        run: |
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh
+      ##- name: Install Trivy
+        ##run: |
+          ##curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh
 
-      - name: Scan Backend Image
+      - name: Trivy Scan - Backend
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: backend:latest
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+          format: table
         run: |
           trivy image --exit-code 0 --severity HIGH,CRITICAL backend:latest
 
-      - name: Scan Frontend Image
-        run: |
-          trivy image --exit-code 0 --severity HIGH,CRITICAL frontend:latest
-
+      - name: Trivy Scan - Frontend
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: frontend:latest
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+          format: table
 
 ##############################################################
 # 6) DOCKER PUSH STAGE
