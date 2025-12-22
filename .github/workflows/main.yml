@@ -315,6 +315,44 @@ jobs:
           exit-code: '0'
           format: table
 
+      - name: Publish Trivy Report to Summary
+        run: |
+          echo "## 🛡️ Trivy Container Security Report" >> $GITHUB_STEP_SUMMARY
+
+          for IMAGE in backend frontend; do
+            FILE="trivy-$IMAGE.json"
+
+            CRITICAL=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' $FILE)
+            HIGH=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH")] | length' $FILE)
+            MEDIUM=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' $FILE)
+            LOW=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="LOW")] | length' $FILE)
+
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 📦 Image: **$IMAGE**" >> $GITHUB_STEP_SUMMARY
+            echo "| Severity | Count |" >> $GITHUB_STEP_SUMMARY
+            echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| 🔴 CRITICAL | $CRITICAL |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🟠 HIGH | $HIGH |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🟡 MEDIUM | $MEDIUM |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🟢 LOW | $LOW |" >> $GITHUB_STEP_SUMMARY
+
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Severity | Package | Installed | Fixed | CVE |" >> $GITHUB_STEP_SUMMARY
+            echo "|----------|---------|-----------|-------|-----|" >> $GITHUB_STEP_SUMMARY
+
+            jq -r '
+              .Results[].Vulnerabilities[]? |
+              "| \(.Severity) | \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion // "-") | \(.VulnerabilityID) |"
+            ' $FILE | head -40 >> $GITHUB_STEP_SUMMARY
+          done
+
+          # ----------------------------------------------------
+          # ❌ FUTURE USE: Fail pipeline on HIGH/CRITICAL
+          # ----------------------------------------------------
+          # if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+          #   exit 1
+          # fi
+
 ##############################################################
 # 6) DOCKER PUSH STAGE
 ##############################################################
