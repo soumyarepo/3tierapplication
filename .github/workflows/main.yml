@@ -266,33 +266,46 @@ jobs:
           docker build -t backend:latest ./backend
           docker build -t frontend:latest ./frontend
 
+      - name: Save Docker Images
+        run: |
+          docker save backend:latest -o backend.tar
+          docker save frontend:latest -o frontend.tar
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: |
+            backend.tar
+            frontend.tar
+
 ##############################################################
 # 5) TRIVY SCAN STAGE
 ##############################################################
   trivy-scan:
-    name: Trivy Container Scan
+    name: Trivy Scan
     runs-on: ubuntu-latest
     needs: docker-build
 
     steps:
-      - name: Checkout Source Cod
-        uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-images
 
+      - name: Load Docker Images
+        run: |
+          docker load -i backend.tar
+          docker load -i frontend.tar
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh
 
       - name: Scan Backend Image
         run: |
-          docker tag backend:latest backend:scan
-          trivy image --exit-code 0 --format json --output trivy-backend.json backend:scan
-          cat trivy-backend.json
+          trivy image --exit-code 0 --severity HIGH,CRITICAL backend:latest
 
       - name: Scan Frontend Image
         run: |
-          docker tag frontend:latest frontend:scan
-          trivy image --exit-code 0 --format json --output trivy-frontend.json frontend:scan
-          cat trivy-frontend.json
+          trivy image --exit-code 0 --severity HIGH,CRITICAL frontend:latest
 
 
 ##############################################################
