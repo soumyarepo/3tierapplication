@@ -299,28 +299,39 @@ jobs:
         ##run: |
           ##curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh
 
+      - name: Prepare report directory
+        run: mkdir -p trivy-reports
+   
+
       - name: Trivy Scan - Backend
         uses: aquasecurity/trivy-action@0.24.0
         with:
           image-ref: backend:latest
+          format: json
+          output: trivy-reports/trivy-backend.json
           severity: HIGH,CRITICAL
           exit-code: '0'
-          format: table
 
       - name: Trivy Scan - Frontend
         uses: aquasecurity/trivy-action@0.24.0
         with:
           image-ref: frontend:latest
+          format: json
+          output: trivy-reports/trivy-frontend.json
           severity: HIGH,CRITICAL
           exit-code: '0'
-          format: table
 
       - name: Publish Trivy Report to Summary
         run: |
           echo "## 🛡️ Trivy Container Security Report" >> $GITHUB_STEP_SUMMARY
 
           for IMAGE in backend frontend; do
-            FILE="trivy-$IMAGE.json"
+            FILE="trivy-reports/trivy-$IMAGE.json"
+
+            if [ ! -f "$FILE" ]; then
+              echo "❌ Trivy report missing for $IMAGE" >> $GITHUB_STEP_SUMMARY
+              continue
+            fi
 
             CRITICAL=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' $FILE)
             HIGH=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH")] | length' $FILE)
