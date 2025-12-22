@@ -289,10 +289,6 @@ jobs:
           cat trivy-backend.json
 
       - name: Scan Frontend Image
-        env:
-          AWS_REGION: ${{ env.AWS_REGION }}
-          ECR_REPO: ${{ env.ECR_REPO }}
-          FRONTEND_IMAGE: ${{ env.FRONTEND_IMAGE }}
         run: |
           docker tag frontend:latest frontend:scan
           trivy image --exit-code 0 --format json --output trivy-frontend.json frontend:scan
