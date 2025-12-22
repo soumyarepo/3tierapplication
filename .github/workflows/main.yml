@@ -373,6 +373,14 @@ jobs:
     needs: trivy-scan
 
     steps:
+      - uses: actions/download-artifact@v4
+        with:
+        name: docker-images
+
+      - name: Load Docker Images
+        run: |
+          docker load -i backend.tar
+          docker load -i frontend.tar
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
